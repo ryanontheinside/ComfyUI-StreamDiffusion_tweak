@@ -12,5 +12,5 @@ setup(
         "diffusers==0.30.0",
         "protobuf==5.27.2"
     ],
-    python_requires=">=3.8",
+    python_requires=">=3.10",
 )
