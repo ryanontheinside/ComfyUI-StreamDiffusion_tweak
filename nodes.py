@@ -9,8 +9,29 @@ import inspect
 from PIL import Image
 
 # Define constants for model paths
-MODELS_ROOT = "/workspace/models"
-ENGINE_DIR = os.path.join(MODELS_ROOT, "StreamDiffusion--engines")
+MODELS_ROOT = os.path.expanduser("/home/ryan/models")
+
+def get_engine_dir(model_id: str) -> str:
+    """Get the engine directory for a specific model"""
+    # Handle full snapshot paths
+    if "snapshots" in model_id:
+        if "KBlueLeaf--kohaku-v2.1" in model_id:
+            model_name = "KBlueLeaf"
+        elif "stabilityai--sd-turbo" in model_id:
+            model_name = "stabilityai"
+        else:
+            model_name = model_id.split('/')[-1]  # fallback behavior
+    # Handle huggingface-style IDs
+    elif model_id == "stabilityai/sd-turbo":
+        model_name = "stabilityai"
+    elif model_id == "KBlueLeaf/kohaku-v2.1":
+        model_name = "KBlueLeaf"
+    else:
+        model_name = model_id.split('/')[-1]  # fallback behavior
+        
+    engine_dir = os.path.join(MODELS_ROOT, "StreamDiffusion--engines", model_name)
+    print(f"Using engine directory: {engine_dir}")  # Debug print
+    return engine_dir
 
 def get_model_path(model_id: str) -> str:
     """Helper function to get the correct model path including snapshots"""
@@ -207,12 +228,14 @@ class StreamDiffusionConfig:
         acc_config = opt_acceleration_config or {}
         sim_config = opt_similarity_filter_config or {}
 
+        engine_dir = get_engine_dir(model)
+
         wrapper = StreamDiffusionWrapper(
             model_id_or_path="KBlueLeaf/kohaku-v2.1",
             lora_dict=None,
             use_lcm_lora=True,
             lcm_lora_id="latent-consistency/lcm-lora-sdv1-5",
-            t_index_list=t_index_list,
+            t_index_list=[37, 45, 48],  # Calculated from t_index_ratio_list [0.75, 0.9, 0.975] * num_inference_steps(50)
             frame_buffer_size=1,
             width=512,
             height=512,
@@ -224,6 +247,7 @@ class StreamDiffusionConfig:
             similar_image_filter_threshold=0.98,
             use_denoising_batch=True,
             seed=2,
+           # t_index_ratio_list=[0.75, 0.9, 0.975],
         )
 
         # wrapper = StreamDiffusionWrapper(
