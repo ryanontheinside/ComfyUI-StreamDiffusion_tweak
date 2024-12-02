@@ -157,7 +157,7 @@ class StreamDiffusionConfig:
     def INPUT_TYPES(s):
         defaults = get_wrapper_defaults([
             "mode", "width", "height", "acceleration", "frame_buffer_size",
-            "use_lcm_lora", "use_tiny_vae", "cfg_type"
+            "use_tiny_vae", "cfg_type"
         ])
         
         return {
@@ -169,7 +169,6 @@ class StreamDiffusionConfig:
                 "height": ("INT", {"default": defaults["height"], "min": 64, "max": 2048}),
                 "acceleration": (["none", "xformers", "tensorrt"], {"default": defaults["acceleration"]}),
                 "frame_buffer_size": ("INT", {"default": defaults["frame_buffer_size"], "min": 1, "max": 16}),
-                "use_lcm_lora": ("BOOLEAN", {"default": defaults["use_lcm_lora"]}),
                 "use_tiny_vae": ("BOOLEAN", {"default": defaults["use_tiny_vae"]}),
                 "cfg_type": (["none", "full", "self", "initialize"], {"default": defaults["cfg_type"]}),
             },
@@ -187,7 +186,7 @@ class StreamDiffusionConfig:
     CATEGORY = "StreamDiffusion"
 
     def load_model(self, model, t_index_list, mode, width, height, acceleration, 
-                  frame_buffer_size, use_lcm_lora, use_tiny_vae, cfg_type, 
+                  frame_buffer_size, use_tiny_vae, cfg_type, 
                   opt_lora_dict=None, opt_lcm_lora_path=None, opt_vae_path=None, opt_acceleration_config=None,
                   opt_similarity_filter_config=None):
         
@@ -221,7 +220,7 @@ class StreamDiffusionConfig:
             warmup=acc_config.get("warmup", acc_defaults["warmup"]),
             do_add_noise=acc_config.get("do_add_noise", acc_defaults["do_add_noise"]),
             use_denoising_batch=acc_config.get("use_denoising_batch", acc_defaults["use_denoising_batch"]),
-            use_lcm_lora=use_lcm_lora,
+            use_lcm_lora=opt_lcm_lora_path is not None,
             use_tiny_vae=use_tiny_vae,
             enable_similar_image_filter=sim_config.get("enable_similar_image_filter", sim_defaults["enable_similar_image_filter"]),
             similar_image_filter_threshold=sim_config.get("similar_image_filter_threshold", sim_defaults["similar_image_filter_threshold"]),
@@ -282,12 +281,12 @@ class StreamDiffusionSimilarityFilterConfig:
             "similar_image_filter_max_skip_frame": similar_image_filter_max_skip_frame
         },)
 
-class StreamDiffusionSampler:
+class StreamDiffusionAccelerationSampler:
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                "stream_model": ("STREAMDIFFUSION_CONFIG",),
+                "stream_diffusion_config": ("STREAMDIFFUSION_CONFIG",),
                 "prompt": ("STRING", {"default": "", "multiline": True}),
                 "negative_prompt": ("STRING", {"default": "", "multiline": True}),
                 "num_inference_steps": ("INT", {"default": 50, "min": 1, "max": 100}),
@@ -338,7 +337,7 @@ class StreamDiffusionSampler:
 
 NODE_CLASS_MAPPINGS = {
     "StreamDiffusionConfig": StreamDiffusionConfig,
-    "StreamDiffusionSampler": StreamDiffusionSampler,
+    "StreamDiffusionAccelerationSampler": StreamDiffusionAccelerationSampler,
     "StreamDiffusionLoraLoader": StreamDiffusionLoraLoader,
     "StreamDiffusionLcmLoraLoader": StreamDiffusionLcmLoraLoader,
     "StreamDiffusionVaeLoader": StreamDiffusionVaeLoader,
@@ -349,7 +348,7 @@ NODE_CLASS_MAPPINGS = {
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "StreamDiffusionConfig": "StreamDiffusionConfig",
-    "StreamDiffusionSampler": "StreamDiffusionSampler",
+    "StreamDiffusionAccelerationSampler": "StreamDiffusionAccelerationSampler",
     "StreamDiffusionLoraLoader": "StreamDiffusionLoraLoader",
     "StreamDiffusionLcmLoraLoader": "StreamDiffusionLcmLoraLoader",
     "StreamDiffusionVaeLoader": "StreamDiffusionVaeLoader",
