@@ -6,6 +6,7 @@ import folder_paths
 import numpy as np
 from .streamdiffusionwrapper import StreamDiffusionWrapper
 import inspect
+from PIL import Image
 
 # Define constants for model paths
 MODELS_ROOT = "/workspace/models"
@@ -163,7 +164,7 @@ class StreamDiffusionConfig:
         return {
             "required": {
                 "model": ("STREAMDIFFUSION_MODEL",),
-                "t_index_list": ("STRING", {"default": "39,35"}),
+                "t_index_list": ("STRING", {"default": "39,35,30"}),
                 "mode": (["img2img", "txt2img"], {"default": defaults["mode"]}),
                 "width": ("INT", {"default": defaults["width"], "min": 64, "max": 2048}),
                 "height": ("INT", {"default": defaults["height"], "min": 64, "max": 2048}),
@@ -181,7 +182,7 @@ class StreamDiffusionConfig:
             }
         }
 
-    RETURN_TYPES = ("STREAMDIFFUSION_CONFIG",)
+    RETURN_TYPES = ("STREAM_MODEL",)
     FUNCTION = "load_model"
     CATEGORY = "StreamDiffusion"
 
@@ -205,29 +206,48 @@ class StreamDiffusionConfig:
         # Extract configs with defaults
         acc_config = opt_acceleration_config or {}
         sim_config = opt_similarity_filter_config or {}
-        
+
         wrapper = StreamDiffusionWrapper(
-            model_id_or_path=model,
+            model_id_or_path="KBlueLeaf/kohaku-v2.1",
+            lora_dict=None,
+            use_lcm_lora=True,
+            lcm_lora_id="latent-consistency/lcm-lora-sdv1-5",
             t_index_list=t_index_list,
-            lora_dict=opt_lora_dict,
-            mode=mode,
-            lcm_lora_id=opt_lcm_lora_path,
-            vae_id=opt_vae_path,
-            width=width,
-            height=height,
-            frame_buffer_size=frame_buffer_size,
-            acceleration=acceleration,
-            warmup=acc_config.get("warmup", acc_defaults["warmup"]),
-            do_add_noise=acc_config.get("do_add_noise", acc_defaults["do_add_noise"]),
-            use_denoising_batch=acc_config.get("use_denoising_batch", acc_defaults["use_denoising_batch"]),
-            use_lcm_lora=opt_lcm_lora_path is not None,
-            use_tiny_vae=use_tiny_vae,
-            enable_similar_image_filter=sim_config.get("enable_similar_image_filter", sim_defaults["enable_similar_image_filter"]),
-            similar_image_filter_threshold=sim_config.get("similar_image_filter_threshold", sim_defaults["similar_image_filter_threshold"]),
-            similar_image_filter_max_skip_frame=sim_config.get("similar_image_filter_max_skip_frame", sim_defaults["similar_image_filter_max_skip_frame"]),
-            cfg_type=cfg_type,
-            engine_dir=ENGINE_DIR,
+            frame_buffer_size=1,
+            width=512,
+            height=512,
+            warmup=10,
+            acceleration="tensorrt",
+            do_add_noise=False,
+            mode="img2img",
+            enable_similar_image_filter=False,
+            similar_image_filter_threshold=0.98,
+            use_denoising_batch=True,
+            seed=2,
         )
+
+        # wrapper = StreamDiffusionWrapper(
+        #     model_id_or_path=model,
+        #     t_index_list=t_index_list,
+        #     lora_dict=opt_lora_dict,
+        #     mode=mode,
+        #     lcm_lora_id=opt_lcm_lora_path,
+        #     vae_id=opt_vae_path,
+        #     width=width,
+        #     height=height,
+        #     frame_buffer_size=frame_buffer_size,
+        #     acceleration=acceleration,
+        #     warmup=acc_config.get("warmup", acc_defaults["warmup"]),
+        #     do_add_noise=acc_config.get("do_add_noise", acc_defaults["do_add_noise"]),
+        #     use_denoising_batch=acc_config.get("use_denoising_batch", acc_defaults["use_denoising_batch"]),
+        #     use_lcm_lora=opt_lcm_lora_path is not None,
+        #     use_tiny_vae=use_tiny_vae,
+        #     enable_similar_image_filter=sim_config.get("enable_similar_image_filter", sim_defaults["enable_similar_image_filter"]),
+        #     similar_image_filter_threshold=sim_config.get("similar_image_filter_threshold", sim_defaults["similar_image_filter_threshold"]),
+        #     similar_image_filter_max_skip_frame=sim_config.get("similar_image_filter_max_skip_frame", sim_defaults["similar_image_filter_max_skip_frame"]),
+        #     cfg_type=cfg_type,
+        #     engine_dir=ENGINE_DIR,
+        # )
         
         return (wrapper,)
 
@@ -286,7 +306,7 @@ class StreamDiffusionAccelerationSampler:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "stream_diffusion_config": ("STREAMDIFFUSION_CONFIG",),
+                "stream_model": ("STREAM_MODEL",),
                 "prompt": ("STRING", {"default": "", "multiline": True}),
                 "negative_prompt": ("STRING", {"default": "", "multiline": True}),
                 "num_inference_steps": ("INT", {"default": 50, "min": 1, "max": 100}),
@@ -306,26 +326,29 @@ class StreamDiffusionAccelerationSampler:
                 guidance_scale, delta, image=None):
         
         # Prepare the model with parameters
+        # stream_model.prepare(
+        #     prompt=prompt,
+        #     negative_prompt=negative_prompt,
+        #     num_inference_steps=num_inference_steps,
+        #     guidance_scale=guidance_scale,
+        #     delta=delta
+        # )
+
         stream_model.prepare(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            num_inference_steps=num_inference_steps,
-            guidance_scale=guidance_scale,
-            delta=delta
+            prompt="talking head, cyberpunk, tron, matrix, ultra-realistic, dark, futuristic, neon, 8k",
+            num_inference_steps=50,
+            guidance_scale=1.2,
         )
 
         # Generate based on mode
         if stream_model.mode == "img2img" and image is not None:
-            # Convert from BHWC to BCHW for the VAE
-            image_tensor = image[0].permute(2, 0, 1)  # HWC -> CHW
-            image_tensor = image_tensor.unsqueeze(0)  # Add batch dimension: CHW -> BCHW
-            # Ensure values are in [-1, 1] range as expected by the VAE
-            image_tensor = (image_tensor * 2.0) - 1.0
-            output = stream_model(image=image_tensor, prompt=prompt)
+            # Convert ComfyUI's BHWC [0,1] tensor to PIL Image
+            image_pil = Image.fromarray((image[0].numpy() * 255).astype(np.uint8))
+            output = stream_model(image=image_pil, prompt=prompt)
         else:
             output = stream_model(prompt=prompt)
 
-        # Convert PIL Image or list of PIL Images to ComfyUI tensor format (BHWC)
+        # Convert output to ComfyUI tensor format (BHWC)
         if isinstance(output, list):
             output = output[0]  # Take first image if list
         
