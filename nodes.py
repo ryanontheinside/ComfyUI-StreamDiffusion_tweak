@@ -163,6 +163,7 @@ class StreamDiffusionLoaderNode:
                 "lcm_lora_path": ("LCM_LORA_PATH",),
                 "vae_path": ("VAE_PATH",),
                 "acceleration_config": ("ACCELERATION_CONFIG",),
+                "similarity_filter_config": ("SIMILARITY_FILTER_CONFIG",),
             }
         }
 
@@ -172,7 +173,8 @@ class StreamDiffusionLoaderNode:
 
     def load_model(self, model, t_index_list, mode, width, height, acceleration, 
                   frame_buffer_size, use_lcm_lora, use_tiny_vae, cfg_type, 
-                  lora_dict=None, lcm_lora_path=None, vae_path=None, acceleration_config=None):
+                  lora_dict=None, lcm_lora_path=None, vae_path=None, acceleration_config=None,
+                  similarity_filter_config=None):
         
         # Parse t_index_list from string to actual list
         t_index_list = [int(x.strip()) for x in t_index_list.split(",")]
@@ -186,6 +188,11 @@ class StreamDiffusionLoaderNode:
         warmup = acceleration_config.get("warmup", 10) if acceleration_config else 10
         do_add_noise = acceleration_config.get("do_add_noise", True) if acceleration_config else True
         use_denoising_batch = acceleration_config.get("use_denoising_batch", True) if acceleration_config else True
+
+        # Extract similarity filter config
+        enable_similar_image_filter = similarity_filter_config.get("enable_similar_image_filter", False) if similarity_filter_config else False
+        similar_image_filter_threshold = similarity_filter_config.get("similar_image_filter_threshold", 0.98) if similarity_filter_config else 0.98
+        similar_image_filter_max_skip_frame = similarity_filter_config.get("similar_image_filter_max_skip_frame", 10) if similarity_filter_config else 10
 
         wrapper = StreamDiffusionWrapper(
             model_id_or_path=model,
@@ -204,7 +211,10 @@ class StreamDiffusionLoaderNode:
             use_tiny_vae=use_tiny_vae,
             cfg_type=cfg_type,
             engine_dir=ENGINE_DIR,
-            use_denoising_batch=use_denoising_batch
+            use_denoising_batch=use_denoising_batch,
+            enable_similar_image_filter=enable_similar_image_filter,
+            similar_image_filter_threshold=similar_image_filter_threshold,
+            similar_image_filter_max_skip_frame=similar_image_filter_max_skip_frame
         )
         
         return (wrapper,)
@@ -229,6 +239,28 @@ class StreamDiffusionAccelerationConfig:
             "warmup": warmup,
             "do_add_noise": do_add_noise,
             "use_denoising_batch": use_denoising_batch
+        },)
+
+class StreamDiffusionSimilarityFilterConfig:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "enable_similar_image_filter": ("BOOLEAN", {"default": False}),
+                "similar_image_filter_threshold": ("FLOAT", {"default": 0.98, "min": 0.0, "max": 1.0}),
+                "similar_image_filter_max_skip_frame": ("INT", {"default": 10, "min": 0, "max": 100}),
+            }
+        }
+
+    RETURN_TYPES = ("SIMILARITY_FILTER_CONFIG",)
+    FUNCTION = "get_similarity_filter_config"
+    CATEGORY = "StreamDiffusion"
+
+    def get_similarity_filter_config(self, enable_similar_image_filter, similar_image_filter_threshold, similar_image_filter_max_skip_frame):
+        return ({
+            "enable_similar_image_filter": enable_similar_image_filter,
+            "similar_image_filter_threshold": similar_image_filter_threshold,
+            "similar_image_filter_max_skip_frame": similar_image_filter_max_skip_frame
         },)
 
 class StreamDiffusionGenerateNode:
@@ -292,6 +324,7 @@ NODE_CLASS_MAPPINGS = {
     "StreamDiffusionLcmLoraLoader": StreamDiffusionLcmLoraLoader,
     "StreamDiffusionVaeLoader": StreamDiffusionVaeLoader,
     "StreamDiffusionAccelerationConfig": StreamDiffusionAccelerationConfig,
+    "StreamDiffusionSimilarityFilterConfig": StreamDiffusionSimilarityFilterConfig,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -301,4 +334,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "StreamDiffusionLcmLoraLoader": "StreamDiffusionLcmLoraLoader",
     "StreamDiffusionVaeLoader": "StreamDiffusionVaeLoader",
     "StreamDiffusionAccelerationConfig": "StreamDiffusionAccelerationConfig",
+    "StreamDiffusionSimilarityFilterConfig": "StreamDiffusionSimilarityFilterConfig", 
 }
