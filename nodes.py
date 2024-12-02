@@ -29,6 +29,7 @@ def get_model_path(model_id: str) -> str:
     return os.path.join(snapshots_dir, snapshot_dirs[0])
 
 def get_lcm_loras():
+    #NOTE: this should ultimately point to the regular COMFYUI Lora directory. 
     """Get list of available LCM LoRAs from StreamDiffusion's model directory"""
     lcm_path = os.path.join(MODELS_ROOT, "models--latent-consistency--lcm-lora-sdv1-5")
     if not os.path.exists(lcm_path):
@@ -119,26 +120,49 @@ class StreamDiffusionVaeLoader:
     def load_vae(self, vae_path):
         return (vae_path,)
 
-class StreamDiffusionLoaderNode:
+class StreamDiffusionModelLoader:
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
                 "model_id_or_path": (["stabilityai/sd-turbo", "KBlueLeaf/kohaku-v2.1"], {"default": "stabilityai/sd-turbo"}),
+            }
+        }   
+
+    RETURN_TYPES = ("STREAMDIFFUSION_MODEL",)
+    FUNCTION = "load_model"
+    CATEGORY = "StreamDiffusion"
+
+    def load_model(self, model_id_or_path):
+        if model_id_or_path in ["stabilityai/sd-turbo", "KBlueLeaf/kohaku-v2.1"]:
+            model_path = get_model_path(model_id_or_path)
+            if model_path != model_id_or_path:  # Only use local path if it exists
+                model_id_or_path = model_path
+                print(f"Using local model path: {model_path}")
+        return (model_id_or_path,)
+
+class StreamDiffusionLoaderNode:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "model": ("STREAMDIFFUSION_MODEL",),
                 "t_index_list": ("STRING", {"default": "39,35"}),
                 "mode": (["img2img", "txt2img"], {"default": "img2img"}),
                 "width": ("INT", {"default": 512, "min": 64, "max": 2048}),
                 "height": ("INT", {"default": 512, "min": 64, "max": 2048}),
-                "acceleration": (["tensorrt", "xformers", "none"], {"default": "tensorrt"}),
+                "acceleration": (["none", "xformers", "tensorrt"], {"default": "tensorrt"}),
                 "frame_buffer_size": ("INT", {"default": 1, "min": 1, "max": 16}),
                 "use_lcm_lora": ("BOOLEAN", {"default": True}),
                 "use_tiny_vae": ("BOOLEAN", {"default": True}),
                 "cfg_type": (["none", "full", "self", "initialize"], {"default": "self"}),
+                
             },
             "optional": {
                 "lora_dict": ("LORA_DICT",),
                 "lcm_lora_path": ("LCM_LORA_PATH",),
                 "vae_path": ("VAE_PATH",),
+                "acceleration_config": ("ACCELERATION_CONFIG",),
             }
         }
 
@@ -146,31 +170,25 @@ class StreamDiffusionLoaderNode:
     FUNCTION = "load_model"
     CATEGORY = "StreamDiffusion"
 
-    def load_model(self, model_id_or_path, t_index_list, mode, width, height, acceleration, 
+    def load_model(self, model, t_index_list, mode, width, height, acceleration, 
                   frame_buffer_size, use_lcm_lora, use_tiny_vae, cfg_type, 
-                  lora_dict=None, lcm_lora_path=None, vae_path=None):
+                  lora_dict=None, lcm_lora_path=None, vae_path=None, acceleration_config=None):
         
         # Parse t_index_list from string to actual list
         t_index_list = [int(x.strip()) for x in t_index_list.split(",")]
 
         # Convert empty strings to None for optional parameters
-        vae_path = vae_path.strip() if vae_path.strip() else None
+        if vae_path is not None:
+            vae_path = vae_path.strip() if vae_path.strip() else None
 
-        # Handle local model paths
-        if model_id_or_path in ["stabilityai/sd-turbo", "KBlueLeaf/kohaku-v2.1"]:
-            model_path = get_model_path(model_id_or_path)
-            if model_path != model_id_or_path:  # Only use local path if it exists
-                model_id_or_path = model_path
-                print(f"Using local model path: {model_path}")
 
-        if lora_dict:
-            print(f"Using LoRAs: {lora_dict}")
-        
-        if lcm_lora_path:
-            print(f"Using custom LCM LoRA: {lcm_lora_path}")
+        # Extract additional acceleration config
+        warmup = acceleration_config.get("warmup", 10) if acceleration_config else 10
+        do_add_noise = acceleration_config.get("do_add_noise", True) if acceleration_config else True
+        use_denoising_batch = acceleration_config.get("use_denoising_batch", True) if acceleration_config else True
 
         wrapper = StreamDiffusionWrapper(
-            model_id_or_path=model_id_or_path,
+            model_id_or_path=model,
             t_index_list=t_index_list,
             lora_dict=lora_dict,
             mode=mode,
@@ -180,13 +198,38 @@ class StreamDiffusionLoaderNode:
             height=height,
             frame_buffer_size=frame_buffer_size,
             acceleration=acceleration,
+            warmup=warmup,
+            do_add_noise=do_add_noise,
             use_lcm_lora=use_lcm_lora,
             use_tiny_vae=use_tiny_vae,
             cfg_type=cfg_type,
-            engine_dir=ENGINE_DIR
+            engine_dir=ENGINE_DIR,
+            use_denoising_batch=use_denoising_batch
         )
         
         return (wrapper,)
+
+class StreamDiffusionAccelerationConfig:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "warmup": ("INT", {"default": 10, "min": 0, "max": 100}),
+                "do_add_noise": ("BOOLEAN", {"default": True}),
+                "use_denoising_batch": ("BOOLEAN", {"default": True}),
+            }
+        }
+
+    RETURN_TYPES = ("ACCELERATION_CONFIG",)
+    FUNCTION = "get_acceleration_config"
+    CATEGORY = "StreamDiffusion"
+
+    def get_acceleration_config(self, warmup, do_add_noise, use_denoising_batch):
+        return ({
+            "warmup": warmup,
+            "do_add_noise": do_add_noise,
+            "use_denoising_batch": use_denoising_batch
+        },)
 
 class StreamDiffusionGenerateNode:
     @classmethod
@@ -248,12 +291,14 @@ NODE_CLASS_MAPPINGS = {
     "StreamDiffusionLoraLoader": StreamDiffusionLoraLoader,
     "StreamDiffusionLcmLoraLoader": StreamDiffusionLcmLoraLoader,
     "StreamDiffusionVaeLoader": StreamDiffusionVaeLoader,
+    "StreamDiffusionAccelerationConfig": StreamDiffusionAccelerationConfig,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "StreamDiffusionLoader": "Load StreamDiffusion Model",
-    "StreamDiffusionGenerate": "Generate with StreamDiffusion",
-    "StreamDiffusionLoraLoader": "Load StreamDiffusion LoRA",
-    "StreamDiffusionLcmLoraLoader": "Load StreamDiffusion LCM LoRA",
-    "StreamDiffusionVaeLoader": "Load StreamDiffusion VAE",
+    "StreamDiffusionLoader": "StreamDiffusionLoader",
+    "StreamDiffusionGenerate": "StreamDiffusionGenerate",
+    "StreamDiffusionLoraLoader": "StreamDiffusionLoraLoader",
+    "StreamDiffusionLcmLoraLoader": "StreamDiffusionLcmLoraLoader",
+    "StreamDiffusionVaeLoader": "StreamDiffusionVaeLoader",
+    "StreamDiffusionAccelerationConfig": "StreamDiffusionAccelerationConfig",
 }
