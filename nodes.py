@@ -153,6 +153,58 @@ class StreamDiffusionVaeLoader:
     def load_vae(self, vae_path):
         return (vae_path,)
 
+
+class StreamDiffusionAccelerationConfig:
+    @classmethod
+    def INPUT_TYPES(s):
+        defaults = get_wrapper_defaults(["warmup", "do_add_noise", "use_denoising_batch"])
+        return {
+            "required": {
+                "warmup": ("INT", {"default": defaults["warmup"], "min": 0, "max": 100}),
+                "do_add_noise": ("BOOLEAN", {"default": defaults["do_add_noise"]}),
+                "use_denoising_batch": ("BOOLEAN", {"default": defaults["use_denoising_batch"]}),
+            }
+        }
+
+    RETURN_TYPES = ("ACCELERATION_CONFIG",)
+    FUNCTION = "get_acceleration_config"
+    CATEGORY = "StreamDiffusion"
+
+    def get_acceleration_config(self, warmup, do_add_noise, use_denoising_batch):
+        return ({
+            "warmup": warmup,
+            "do_add_noise": do_add_noise,
+            "use_denoising_batch": use_denoising_batch
+        },)
+
+class StreamDiffusionSimilarityFilterConfig:
+    @classmethod
+    def INPUT_TYPES(s):
+        defaults = get_wrapper_defaults([
+            "enable_similar_image_filter",
+            "similar_image_filter_threshold",
+            "similar_image_filter_max_skip_frame"
+        ])
+        return {
+            "required": {
+                "enable_similar_image_filter": ("BOOLEAN", {"default": defaults["enable_similar_image_filter"]}),
+                "similar_image_filter_threshold": ("FLOAT", {"default": defaults["similar_image_filter_threshold"], "min": 0.0, "max": 1.0}),
+                "similar_image_filter_max_skip_frame": ("INT", {"default": defaults["similar_image_filter_max_skip_frame"], "min": 0, "max": 100}),
+            }
+        }
+
+    RETURN_TYPES = ("SIMILARITY_FILTER_CONFIG",)
+    FUNCTION = "get_similarity_filter_config"
+    CATEGORY = "StreamDiffusion"
+
+    def get_similarity_filter_config(self, enable_similar_image_filter, similar_image_filter_threshold, similar_image_filter_max_skip_frame):
+        return ({
+            "enable_similar_image_filter": enable_similar_image_filter,
+            "similar_image_filter_threshold": similar_image_filter_threshold,
+            "similar_image_filter_max_skip_frame": similar_image_filter_max_skip_frame
+        },)
+
+
 class StreamDiffusionModelLoader:
     @classmethod
     def INPUT_TYPES(s):
@@ -233,97 +285,25 @@ class StreamDiffusionConfig:
         wrapper = StreamDiffusionWrapper(
             model_id_or_path="KBlueLeaf/kohaku-v2.1",
             lora_dict=None,
-            use_lcm_lora=True,
-            lcm_lora_id="latent-consistency/lcm-lora-sdv1-5",
-            t_index_list=[37, 45, 48],  # Calculated from t_index_ratio_list [0.75, 0.9, 0.975] * num_inference_steps(50)
+            use_lcm_lora=False,  # Disable LCM LoRA
+            lcm_lora_id=None,    # No LCM LoRA
+            t_index_list=list(range(1, 50)),  # Full range of steps
             frame_buffer_size=1,
             width=512,
             height=512,
             warmup=10,
-            acceleration="tensorrt",
-            do_add_noise=False,
-            mode="img2img",
+            acceleration="none",  # No acceleration
+            do_add_noise=True,
+            mode="txt2img",  # Simpler mode
             enable_similar_image_filter=False,
             similar_image_filter_threshold=0.98,
             use_denoising_batch=True,
+            use_tiny_vae=False,  # Use full VAE
+            output_type="pil",   # Explicitly request PIL output
+            cfg_type='none',
             seed=2,
-           # t_index_ratio_list=[0.75, 0.9, 0.975],
-        )
-
-        # wrapper = StreamDiffusionWrapper(
-        #     model_id_or_path=model,
-        #     t_index_list=t_index_list,
-        #     lora_dict=opt_lora_dict,
-        #     mode=mode,
-        #     lcm_lora_id=opt_lcm_lora_path,
-        #     vae_id=opt_vae_path,
-        #     width=width,
-        #     height=height,
-        #     frame_buffer_size=frame_buffer_size,
-        #     acceleration=acceleration,
-        #     warmup=acc_config.get("warmup", acc_defaults["warmup"]),
-        #     do_add_noise=acc_config.get("do_add_noise", acc_defaults["do_add_noise"]),
-        #     use_denoising_batch=acc_config.get("use_denoising_batch", acc_defaults["use_denoising_batch"]),
-        #     use_lcm_lora=opt_lcm_lora_path is not None,
-        #     use_tiny_vae=use_tiny_vae,
-        #     enable_similar_image_filter=sim_config.get("enable_similar_image_filter", sim_defaults["enable_similar_image_filter"]),
-        #     similar_image_filter_threshold=sim_config.get("similar_image_filter_threshold", sim_defaults["similar_image_filter_threshold"]),
-        #     similar_image_filter_max_skip_frame=sim_config.get("similar_image_filter_max_skip_frame", sim_defaults["similar_image_filter_max_skip_frame"]),
-        #     cfg_type=cfg_type,
-        #     engine_dir=ENGINE_DIR,
-        # )
-        
+        )        
         return (wrapper,)
-
-class StreamDiffusionAccelerationConfig:
-    @classmethod
-    def INPUT_TYPES(s):
-        defaults = get_wrapper_defaults(["warmup", "do_add_noise", "use_denoising_batch"])
-        return {
-            "required": {
-                "warmup": ("INT", {"default": defaults["warmup"], "min": 0, "max": 100}),
-                "do_add_noise": ("BOOLEAN", {"default": defaults["do_add_noise"]}),
-                "use_denoising_batch": ("BOOLEAN", {"default": defaults["use_denoising_batch"]}),
-            }
-        }
-
-    RETURN_TYPES = ("ACCELERATION_CONFIG",)
-    FUNCTION = "get_acceleration_config"
-    CATEGORY = "StreamDiffusion"
-
-    def get_acceleration_config(self, warmup, do_add_noise, use_denoising_batch):
-        return ({
-            "warmup": warmup,
-            "do_add_noise": do_add_noise,
-            "use_denoising_batch": use_denoising_batch
-        },)
-
-class StreamDiffusionSimilarityFilterConfig:
-    @classmethod
-    def INPUT_TYPES(s):
-        defaults = get_wrapper_defaults([
-            "enable_similar_image_filter",
-            "similar_image_filter_threshold",
-            "similar_image_filter_max_skip_frame"
-        ])
-        return {
-            "required": {
-                "enable_similar_image_filter": ("BOOLEAN", {"default": defaults["enable_similar_image_filter"]}),
-                "similar_image_filter_threshold": ("FLOAT", {"default": defaults["similar_image_filter_threshold"], "min": 0.0, "max": 1.0}),
-                "similar_image_filter_max_skip_frame": ("INT", {"default": defaults["similar_image_filter_max_skip_frame"], "min": 0, "max": 100}),
-            }
-        }
-
-    RETURN_TYPES = ("SIMILARITY_FILTER_CONFIG",)
-    FUNCTION = "get_similarity_filter_config"
-    CATEGORY = "StreamDiffusion"
-
-    def get_similarity_filter_config(self, enable_similar_image_filter, similar_image_filter_threshold, similar_image_filter_max_skip_frame):
-        return ({
-            "enable_similar_image_filter": enable_similar_image_filter,
-            "similar_image_filter_threshold": similar_image_filter_threshold,
-            "similar_image_filter_max_skip_frame": similar_image_filter_max_skip_frame
-        },)
 
 class StreamDiffusionAccelerationSampler:
     @classmethod
@@ -349,36 +329,38 @@ class StreamDiffusionAccelerationSampler:
     def generate(self, stream_model, prompt, negative_prompt, num_inference_steps, 
                 guidance_scale, delta, image=None):
         
-        # Prepare the model with parameters
-        # stream_model.prepare(
-        #     prompt=prompt,
-        #     negative_prompt=negative_prompt,
-        #     num_inference_steps=num_inference_steps,
-        #     guidance_scale=guidance_scale,
-        #     delta=delta
-        # )
-
         stream_model.prepare(
-            prompt="talking head, cyberpunk, tron, matrix, ultra-realistic, dark, futuristic, neon, 8k",
-            num_inference_steps=50,
-            guidance_scale=1.2,
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            delta=delta
         )
+        print("Model prepared")
 
         # Generate based on mode
         if stream_model.mode == "img2img" and image is not None:
-            # Convert ComfyUI's BHWC [0,1] tensor to PIL Image
+            print("Running img2img generation")
             image_pil = Image.fromarray((image[0].numpy() * 255).astype(np.uint8))
             output = stream_model(image=image_pil, prompt=prompt)
         else:
+            print("Running txt2img generation")
             output = stream_model(prompt=prompt)
+        
+        print(f"Generation complete. Output type: {type(output)}")
 
         # Convert output to ComfyUI tensor format (BHWC)
         if isinstance(output, list):
             output = output[0]  # Take first image if list
-        
-        # Convert PIL Image to tensor in BHWC format
+        # Display output PIL image and save to disk
+        print(f"Output image size: {output.size}")
+        output.show()
+        output.save("streamdiffusion_output.png")
         output_tensor = torch.from_numpy(np.array(output)).float() / 255.0
         output_tensor = output_tensor.unsqueeze(0)  # Add batch dimension: HWC -> BHWC
+        
+        print(f"Final tensor shape: {output_tensor.shape}")
+        print("=== Generation Complete ===\n")
         
         return (output_tensor,)
 
