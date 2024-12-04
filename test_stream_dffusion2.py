@@ -40,10 +40,10 @@ def test_txt2img():
         image.save("kohaku_txt2img_output.png")
 
 def test_img2img():
-    # Initialize wrapper for img2img with more aggressive settings
+    # Initialize wrapper for img2img with more appropriate settings
     wrapper = StreamDiffusionWrapper(
         model_id_or_path="KBlueLeaf/kohaku-v2.1",
-        t_index_list=[1, 10],  # Very strong effect
+        t_index_list=[22, 32, 45],
         mode="img2img",
         output_type="pil",
         device="cuda",
@@ -51,29 +51,19 @@ def test_img2img():
         frame_buffer_size=1,
         width=512,
         height=512,
-        warmup=1,
+        warmup=10,
         acceleration="tensorrt",
         use_lcm_lora=True,
-        cfg_type="full",  # Using full CFG
+        cfg_type="self",
         do_add_noise=True,
+        use_denoising_batch=True,  # Ensure this is set to True
     )
 
     # Load and preprocess input image
     try:
         input_image = Image.open("ryan.png").convert("RGB")
         input_image = input_image.resize((512, 512))
-        
-        print(f"Original image size: {input_image.size}")
-        
-        # Convert PIL to tensor manually
-        input_tensor = torch.from_numpy(np.array(input_image)).float()
-        input_tensor = input_tensor.permute(2, 0, 1).unsqueeze(0)  # BHWC -> BCHW
-        input_tensor = input_tensor / 255.0  # Scale to [0,1]
-        input_tensor = input_tensor.to(device=wrapper.device, dtype=wrapper.dtype)
-        
-        print(f"Preprocessed tensor shape: {input_tensor.shape}")
-        print(f"Tensor value range: {input_tensor.min():.2f} to {input_tensor.max():.2f}")
-        
+        input_tensor = wrapper.preprocess_image(input_image)
     except FileNotFoundError:
         print("Error: ryan.png not found in the current directory!")
         return
@@ -81,43 +71,35 @@ def test_img2img():
         print(f"Error loading image: {e}")
         return
 
-    # Test img2img generation with extreme settings
-    prompt = "1girl, white hair, golden eyes, detailed face, masterpiece, highly detailed"
+    prompt = "1girl, white hair, golden eyes, detailed face, masterpiece"
     negative_prompt = "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry"
     
     wrapper.prepare(
         prompt=prompt,
         negative_prompt=negative_prompt,
-        guidance_scale=15.0,  # Very high guidance scale
-        num_inference_steps=50
+        guidance_scale=1.2,
+        num_inference_steps=50,
+        delta=0.5
     )
     
     print("Starting img2img generation...")
     
-    # Try to directly use the stream's img2img method
-    try:
-        # First warmup pass
-        print("Performing warmup pass...")
-        for _ in range(wrapper.batch_size):
-            wrapper.stream(input_tensor)
-            
-        print("Starting main generation...")
-        # Main generation
-        image_tensor = wrapper.stream(input_tensor)
-        output_image = wrapper.postprocess_image(image_tensor, output_type="pil")
-    except Exception as e:
-        print(f"Error during generation: {e}")
-        return
-        
+    # Warmup loop
+    for _ in range(wrapper.batch_size - 1):
+        wrapper(image=input_tensor)
+    
+    # Generate the final output
+    output_image = wrapper(image=input_tensor)
+    
     print("Generation completed")
     
-    # Save both input and output for comparison
+    # Save output
     input_image.save("input_image.png")
     if isinstance(output_image, list):
         for i, img in enumerate(output_image):
             img.save(f"kohaku_img2img_output_{i}.png")
     else:
-        output_image.save("kohaku_img2img_output.png")
+        output_image.save("kohaku_img2img_output.png") 
 
 if __name__ == "__main__":
     #print("Testing txt2img with Kohaku v2.1...")
