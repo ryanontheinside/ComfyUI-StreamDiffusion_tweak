@@ -153,7 +153,6 @@ class StreamDiffusionVaeLoader:
     def load_vae(self, vae_path):
         return (vae_path,)
 
-
 class StreamDiffusionAccelerationConfig:
     @classmethod
     def INPUT_TYPES(s):
@@ -204,7 +203,6 @@ class StreamDiffusionSimilarityFilterConfig:
             "similar_image_filter_max_skip_frame": similar_image_filter_max_skip_frame
         },)
 
-
 class StreamDiffusionModelLoader:
     @classmethod
     def INPUT_TYPES(s):
@@ -245,13 +243,14 @@ class StreamDiffusionConfig:
                 "frame_buffer_size": ("INT", {"default": defaults["frame_buffer_size"], "min": 1, "max": 16}),
                 "use_tiny_vae": ("BOOLEAN", {"default": defaults["use_tiny_vae"]}),
                 "cfg_type": (["none", "full", "self", "initialize"], {"default": defaults["cfg_type"]}),
+                "use_lcm_lora": ("BOOLEAN", {"default": True}),
             },
             "optional": {
                 "opt_lora_dict": ("LORA_DICT",),
-                "opt_lcm_lora_path": ("LCM_LORA_PATH",),
-                "opt_vae_path": ("VAE_PATH",),
                 "opt_acceleration_config": ("ACCELERATION_CONFIG",),
                 "opt_similarity_filter_config": ("SIMILARITY_FILTER_CONFIG",),
+                # "opt_lcm_lora_path": ("LCM_LORA_PATH",),
+                # "opt_vae_path": ("VAE_PATH",),
             }
         }
 
@@ -260,49 +259,53 @@ class StreamDiffusionConfig:
     CATEGORY = "StreamDiffusion"
 
     def load_model(self, model, t_index_list, mode, width, height, acceleration, 
-                  frame_buffer_size, use_tiny_vae, cfg_type, 
-                  opt_lora_dict=None, opt_lcm_lora_path=None, opt_vae_path=None, opt_acceleration_config=None,
-                  opt_similarity_filter_config=None):
+                  frame_buffer_size, use_tiny_vae, cfg_type, use_lcm_lora,
+                  opt_lora_dict=None, opt_acceleration_config=None,
+                  opt_similarity_filter_config=None,
+                  #opt_lcm_lora_path=None, opt_vae_path=None,
+                  ):
         
         t_index_list = [int(x.strip()) for x in t_index_list.split(",")]
-        if opt_vae_path is not None:
-            vae_path = opt_vae_path.strip() if opt_vae_path.strip() else None
-
-        # Get defaults for config parameters
-        acc_defaults = get_wrapper_defaults(["warmup", "do_add_noise", "use_denoising_batch"])
-        sim_defaults = get_wrapper_defaults([
-            "enable_similar_image_filter", 
-            "similar_image_filter_threshold",
-            "similar_image_filter_max_skip_frame"
-        ])
         
-        # Extract configs with defaults
-        acc_config = opt_acceleration_config or {}
-        sim_config = opt_similarity_filter_config or {}
+        # Build base configuration with all current parameters
+        config = {
+            "model_id_or_path": model,
+            "t_index_list": t_index_list,
+            "mode": mode,
+            "width": width,
+            "height": height,
+            "acceleration": acceleration,
+            "frame_buffer_size": frame_buffer_size,
+            "use_tiny_vae": use_tiny_vae,
+            "cfg_type": cfg_type,
+            "use_lcm_lora": use_lcm_lora,
+            "device": "cuda",
+            "dtype": torch.float16,
+            "output_type": "pil",
+            "do_add_noise": True,
+            "use_denoising_batch": True,
+        }
+
+        if opt_lora_dict:
+            config["lora_dict"] = opt_lora_dict
+
+        # if opt_lcm_lora_path:
+        #     config["lcm_lora_id"] = opt_lcm_lora_path
+
+        # if opt_vae_path is not None:
+        #     config["vae_id"] = opt_vae_path.strip() if opt_vae_path.strip() else None
+
+        # Add acceleration config if provided
+        if opt_acceleration_config:
+            config.update(opt_acceleration_config)
+
+        # Add similarity filter config if provided
+        if opt_similarity_filter_config:
+            config.update(opt_similarity_filter_config)
 
         engine_dir = get_engine_dir(model)
+        wrapper = StreamDiffusionWrapper(**config)
 
-        wrapper = StreamDiffusionWrapper(
-            model_id_or_path="KBlueLeaf/kohaku-v2.1",
-            lora_dict=None,
-            use_lcm_lora=False,  # Disable LCM LoRA
-            lcm_lora_id=None,    # No LCM LoRA
-            t_index_list=list(range(1, 50)),  # Full range of steps
-            frame_buffer_size=1,
-            width=512,
-            height=512,
-            warmup=10,
-            acceleration="none",  # No acceleration
-            do_add_noise=True,
-            mode="txt2img",  # Simpler mode
-            enable_similar_image_filter=False,
-            similar_image_filter_threshold=0.98,
-            use_denoising_batch=True,
-            use_tiny_vae=False,  # Use full VAE
-            output_type="pil",   # Explicitly request PIL output
-            cfg_type='none',
-            seed=2,
-        )        
         return (wrapper,)
 
 class StreamDiffusionAccelerationSampler:
@@ -336,31 +339,28 @@ class StreamDiffusionAccelerationSampler:
             guidance_scale=guidance_scale,
             delta=delta
         )
-        print("Model prepared")
 
-        # Generate based on mode
+        # Warmup loop for img2img mode
         if stream_model.mode == "img2img" and image is not None:
-            print("Running img2img generation")
-            image_pil = Image.fromarray((image[0].numpy() * 255).astype(np.uint8))
-            output = stream_model(image=image_pil, prompt=prompt)
+            image_tensor = stream_model.preprocess_image(
+                Image.fromarray((image[0].numpy() * 255).astype(np.uint8))
+            )
+            # Perform warmup iterations
+            for _ in range(stream_model.batch_size - 1):
+                stream_model(image=image_tensor)
+            # Final generation
+            output = stream_model(image=image_tensor)
         else:
-            print("Running txt2img generation")
-            output = stream_model(prompt=prompt)
+            output = stream_model.txt2img()
         
-        print(f"Generation complete. Output type: {type(output)}")
-
-        # Convert output to ComfyUI tensor format (BHWC)
-        if isinstance(output, list):
-            output = output[0]  # Take first image if list
-        # Display output PIL image and save to disk
-        print(f"Output image size: {output.size}")
-        output.show()
-        output.save("streamdiffusion_output.png")
-        output_tensor = torch.from_numpy(np.array(output)).float() / 255.0
-        output_tensor = output_tensor.unsqueeze(0)  # Add batch dimension: HWC -> BHWC
+        output_array = np.array(output)
         
-        print(f"Final tensor shape: {output_tensor.shape}")
-        print("=== Generation Complete ===\n")
+        # Convert to tensor and normalize to 0-1 range
+        output_tensor = torch.from_numpy(output_array).float() / 255.0
+        
+        # Ensure BHWC format
+        if len(output_tensor.shape) == 3:  # If HWC
+            output_tensor = output_tensor.unsqueeze(0)  # Add batch dimension -> BHWC
         
         return (output_tensor,)
 
@@ -368,8 +368,8 @@ NODE_CLASS_MAPPINGS = {
     "StreamDiffusionConfig": StreamDiffusionConfig,
     "StreamDiffusionAccelerationSampler": StreamDiffusionAccelerationSampler,
     "StreamDiffusionLoraLoader": StreamDiffusionLoraLoader,
-    "StreamDiffusionLcmLoraLoader": StreamDiffusionLcmLoraLoader,
-    "StreamDiffusionVaeLoader": StreamDiffusionVaeLoader,
+    # "StreamDiffusionLcmLoraLoader": StreamDiffusionLcmLoraLoader,
+    # "StreamDiffusionVaeLoader": StreamDiffusionVaeLoader,
     "StreamDiffusionAccelerationConfig": StreamDiffusionAccelerationConfig,
     "StreamDiffusionSimilarityFilterConfig": StreamDiffusionSimilarityFilterConfig,
     "StreamDiffusionModelLoader": StreamDiffusionModelLoader,
@@ -379,8 +379,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "StreamDiffusionConfig": "StreamDiffusionConfig",
     "StreamDiffusionAccelerationSampler": "StreamDiffusionAccelerationSampler",
     "StreamDiffusionLoraLoader": "StreamDiffusionLoraLoader",
-    "StreamDiffusionLcmLoraLoader": "StreamDiffusionLcmLoraLoader",
-    "StreamDiffusionVaeLoader": "StreamDiffusionVaeLoader",
+    # "StreamDiffusionLcmLoraLoader": "StreamDiffusionLcmLoraLoader",
+    # "StreamDiffusionVaeLoader": "StreamDiffusionVaeLoader",
     "StreamDiffusionAccelerationConfig": "StreamDiffusionAccelerationConfig",
     "StreamDiffusionSimilarityFilterConfig": "StreamDiffusionSimilarityFilterConfig", 
     "StreamDiffusionModelLoader": "StreamDiffusionModelLoader",
