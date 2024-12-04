@@ -51,39 +51,6 @@ def get_model_path(model_id: str) -> str:
         
     return os.path.join(snapshots_dir, snapshot_dirs[0])
 
-def get_lcm_loras():
-    #NOTE: this should ultimately point to the regular COMFYUI Lora directory. 
-    """Get list of available LCM LoRAs from StreamDiffusion's model directory"""
-    lcm_path = os.path.join(MODELS_ROOT, "models--latent-consistency--lcm-lora-sdv1-5")
-    if not os.path.exists(lcm_path):
-        return ["latent-consistency/lcm-lora-sdv1-5"]  # Default option
-    
-    snapshots_dir = os.path.join(lcm_path, "snapshots")
-    if not os.path.exists(snapshots_dir):
-        return ["latent-consistency/lcm-lora-sdv1-5"]
-        
-    snapshot_dirs = os.listdir(snapshots_dir)
-    if not snapshot_dirs:
-        return ["latent-consistency/lcm-lora-sdv1-5"]
-    
-    return [os.path.join(snapshots_dir, snapshot_dirs[0])]
-
-def get_available_vaes():
-    """Get list of available VAEs from StreamDiffusion's model directory"""
-    # Default tiny VAE
-    vaes = ["madebyollin/taesd"]
-    
-    # Check for local VAEs
-    vae_path = os.path.join(MODELS_ROOT, "models--madebyollin--taesd")
-    if os.path.exists(vae_path):
-        snapshots_dir = os.path.join(vae_path, "snapshots")
-        if os.path.exists(snapshots_dir):
-            snapshot_dirs = os.listdir(snapshots_dir)
-            if snapshot_dirs:
-                vaes.append(os.path.join(snapshots_dir, snapshot_dirs[0]))
-    
-    return vaes
-
 def get_wrapper_defaults(param_names):
     """Helper function to get default values from StreamDiffusionWrapper parameters
     Args:
@@ -99,17 +66,19 @@ class StreamDiffusionLoraLoader:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "lora_name": (folder_paths.get_filename_list("loras"), ),
-                "strength": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 2.0, "step": 0.01}),
+                "lora_name": (folder_paths.get_filename_list("loras"), {"tooltip": "The name of the LoRA model to load."}),
+                "strength": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 10.0, "step": 0.01, "tooltip": "The strength scale for the LoRA model. Higher values result in greater influence of the LoRA on the output."}),
             },
             "optional": {
-                "previous_loras": ("LORA_DICT",),  # Allow chaining
+                "previous_loras": ("LORA_DICT", {"tooltip": "Optional dictionary of previously loaded LoRAs to which the new LoRA will be added. Use this to combine multiple LoRAs."}),
             }
         }
 
     RETURN_TYPES = ("LORA_DICT",)
+    OUTPUT_TOOLTIPS = ("Dictionary of loaded LoRA models.",)
     FUNCTION = "load_lora"
     CATEGORY = "StreamDiffusion"
+    DESCRIPTION = "Loads a LoRA (Low-Rank Adaptation) model and adds it to the existing LoRA dictionary for application to the pipeline."
 
     def load_lora(self, lora_name, strength, previous_loras=None):
         # Initialize with previous loras if provided
@@ -121,28 +90,14 @@ class StreamDiffusionLoraLoader:
         
         return (lora_dict,)
 
-class StreamDiffusionLcmLoraLoader:
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "lcm_lora_path": (get_lcm_loras(), {"default": "latent-consistency/lcm-lora-sdv1-5"}),
-            }
-        }
-
-    RETURN_TYPES = ("LCM_LORA_PATH",)
-    FUNCTION = "load_lcm_lora"
-    CATEGORY = "StreamDiffusion"
-
-    def load_lcm_lora(self, lcm_lora_path):
-        return (lcm_lora_path,)
+# "latent-consistency/lcm-lora-sdv1-5"
 
 class StreamDiffusionVaeLoader:
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                "vae_path": (get_available_vaes(), {"default": "madebyollin/taesd"}),
+                "vae_name": (folder_paths.get_filename_list("vae"), ),
             }
         }
 
@@ -150,7 +105,8 @@ class StreamDiffusionVaeLoader:
     FUNCTION = "load_vae"
     CATEGORY = "StreamDiffusion"
 
-    def load_vae(self, vae_path):
+    def load_vae(self, vae_name):
+        vae_path = folder_paths.get_full_path("vae", vae_name)
         return (vae_path,)
 
 class StreamDiffusionAccelerationConfig:
@@ -159,15 +115,17 @@ class StreamDiffusionAccelerationConfig:
         defaults = get_wrapper_defaults(["warmup", "do_add_noise", "use_denoising_batch"])
         return {
             "required": {
-                "warmup": ("INT", {"default": defaults["warmup"], "min": 0, "max": 100}),
-                "do_add_noise": ("BOOLEAN", {"default": defaults["do_add_noise"]}),
-                "use_denoising_batch": ("BOOLEAN", {"default": defaults["use_denoising_batch"]}),
+                "warmup": ("INT", {"default": defaults["warmup"], "min": 0, "max": 100, "tooltip": "The number of warmup steps to perform before actual inference. Increasing this may improve stability at the cost of speed."}),
+                "do_add_noise": ("BOOLEAN", {"default": defaults["do_add_noise"], "tooltip": "Whether to add noise during denoising steps. Enable this to allow the model to generate diverse outputs."}),
+                "use_denoising_batch": ("BOOLEAN", {"default": defaults["use_denoising_batch"], "tooltip": "Whether to use batch denoising for performance optimization."}),
             }
         }
 
     RETURN_TYPES = ("ACCELERATION_CONFIG",)
+    OUTPUT_TOOLTIPS = ("Configuration settings for acceleration.",)
     FUNCTION = "get_acceleration_config"
     CATEGORY = "StreamDiffusion"
+    DESCRIPTION = "Configures acceleration settings for the StreamDiffusion model to optimize performance."
 
     def get_acceleration_config(self, warmup, do_add_noise, use_denoising_batch):
         return ({
@@ -186,15 +144,17 @@ class StreamDiffusionSimilarityFilterConfig:
         ])
         return {
             "required": {
-                "enable_similar_image_filter": ("BOOLEAN", {"default": defaults["enable_similar_image_filter"]}),
-                "similar_image_filter_threshold": ("FLOAT", {"default": defaults["similar_image_filter_threshold"], "min": 0.0, "max": 1.0}),
-                "similar_image_filter_max_skip_frame": ("INT", {"default": defaults["similar_image_filter_max_skip_frame"], "min": 0, "max": 100}),
+                "enable_similar_image_filter": ("BOOLEAN", {"default": defaults["enable_similar_image_filter"], "tooltip": "Enable filtering out images that are too similar to previous outputs."}),
+                "similar_image_filter_threshold": ("FLOAT", {"default": defaults["similar_image_filter_threshold"], "min": 0.0, "max": 1.0, "tooltip": "Threshold determining how similar an image must be to previous outputs to be filtered out (0.0 to 1.0)."}),
+                "similar_image_filter_max_skip_frame": ("INT", {"default": defaults["similar_image_filter_max_skip_frame"], "min": 0, "max": 100, "tooltip": "Maximum number of frames to skip when filtering similar images."}),
             }
         }
 
     RETURN_TYPES = ("SIMILARITY_FILTER_CONFIG",)
+    OUTPUT_TOOLTIPS = ("Configuration settings for similarity filtering.",)
     FUNCTION = "get_similarity_filter_config"
     CATEGORY = "StreamDiffusion"
+    DESCRIPTION = "Configures similarity filtering to prevent generating images that are too similar to previous outputs."
 
     def get_similarity_filter_config(self, enable_similar_image_filter, similar_image_filter_threshold, similar_image_filter_max_skip_frame):
         return ({
@@ -203,18 +163,52 @@ class StreamDiffusionSimilarityFilterConfig:
             "similar_image_filter_max_skip_frame": similar_image_filter_max_skip_frame
         },)
 
+class StreamDiffusionDeviceConfig:
+    @classmethod
+    def INPUT_TYPES(s):
+        defaults = get_wrapper_defaults(["device", "device_ids", "dtype", "use_safety_checker", "engine_dir"])
+        return {
+            "required": {
+                "device": (["cuda", "cpu"], {"default": "cuda", "tooltip": "Device to run inference on. CPU will be significantly slower."}),
+                "dtype": (["float16", "float32"], {"default": "float16", "tooltip": "Data type for inference. float16 uses less memory but may be less precise."}),
+                "device_ids": ("STRING", {"default": "", "tooltip": "Comma-separated list of device IDs for multi-GPU support. Leave empty for single GPU."}),
+                "use_safety_checker": ("BOOLEAN", {"default": False, "tooltip": "Enable safety checker to filter NSFW content. May impact performance."}),
+                "engine_dir": ("STRING", {"default": "engines", "tooltip": "Directory for TensorRT engine files when using tensorrt acceleration."}),
+            }
+        }
+
+    RETURN_TYPES = ("DEVICE_CONFIG",)
+    OUTPUT_TOOLTIPS = ("Configuration settings for device and engine parameters.",)
+    FUNCTION = "get_device_config"
+    CATEGORY = "StreamDiffusion"
+    DESCRIPTION = "Configures device, engine, and safety checker settings for the StreamDiffusion model."
+
+    def get_device_config(self, device, dtype, device_ids, use_safety_checker, engine_dir):
+        # Convert device_ids string to list if provided
+        device_ids = [int(x.strip()) for x in device_ids.split(",")] if device_ids.strip() else None
+        
+        return ({
+            "device": device,
+            "dtype": torch.float32 if dtype == "float32" else torch.float16,
+            "device_ids": device_ids,
+            "use_safety_checker": use_safety_checker,
+            "engine_dir": engine_dir,
+        },)
+
 class StreamDiffusionModelLoader:
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                "model_id_or_path": (["stabilityai/sd-turbo", "KBlueLeaf/kohaku-v2.1"], {"default": "stabilityai/sd-turbo"}),
+                "model_id_or_path": (["stabilityai/sd-turbo", "KBlueLeaf/kohaku-v2.1"], {"default": "stabilityai/sd-turbo", "tooltip": "The model identifier or path to the model to load for generation."}),
             }
         }   
 
     RETURN_TYPES = ("STREAMDIFFUSION_MODEL",)
+    OUTPUT_TOOLTIPS = ("The loaded StreamDiffusion model.",)
     FUNCTION = "load_model"
     CATEGORY = "StreamDiffusion"
+    DESCRIPTION = "Loads the specified StreamDiffusion model for use in generation."
 
     def load_model(self, model_id_or_path):
         if model_id_or_path in ["stabilityai/sd-turbo", "KBlueLeaf/kohaku-v2.1"]:
@@ -229,41 +223,44 @@ class StreamDiffusionConfig:
     def INPUT_TYPES(s):
         defaults = get_wrapper_defaults([
             "mode", "width", "height", "acceleration", "frame_buffer_size",
-            "use_tiny_vae", "cfg_type"
+            "use_tiny_vae", "cfg_type", "seed"
         ])
         
         return {
             "required": {
-                "model": ("STREAMDIFFUSION_MODEL",),
-                "t_index_list": ("STRING", {"default": "39,35,30"}),
-                "mode": (["img2img", "txt2img"], {"default": defaults["mode"]}),
-                "width": ("INT", {"default": defaults["width"], "min": 64, "max": 2048}),
-                "height": ("INT", {"default": defaults["height"], "min": 64, "max": 2048}),
-                "acceleration": (["none", "xformers", "tensorrt"], {"default": defaults["acceleration"]}),
-                "frame_buffer_size": ("INT", {"default": defaults["frame_buffer_size"], "min": 1, "max": 16}),
-                "use_tiny_vae": ("BOOLEAN", {"default": defaults["use_tiny_vae"]}),
-                "cfg_type": (["none", "full", "self", "initialize"], {"default": defaults["cfg_type"]}),
-                "use_lcm_lora": ("BOOLEAN", {"default": True}),
+                "model": ("STREAMDIFFUSION_MODEL", {"tooltip": "The StreamDiffusion model to use for generation."}),
+                "t_index_list": ("STRING", {"default": "39,35,30", "tooltip": "Comma-separated list of t_index values determining at which steps to output images."}),
+                "mode": (["img2img", "txt2img"], {"default": defaults["mode"], "tooltip": "Generation mode: image-to-image or text-to-image."}),
+                "width": ("INT", {"default": defaults["width"], "min": 64, "max": 2048, "tooltip": "The width of the generated images."}),
+                "height": ("INT", {"default": defaults["height"], "min": 64, "max": 2048, "tooltip": "The height of the generated images."}),
+                "acceleration": (["none", "xformers", "tensorrt"], {"default": defaults["acceleration"], "tooltip": "Acceleration method to optimize performance."}),
+                "frame_buffer_size": ("INT", {"default": defaults["frame_buffer_size"], "min": 1, "max": 16, "tooltip": "Size of the frame buffer for batch denoising. Increasing this can improve performance at the cost of higher memory usage."}),
+                "use_tiny_vae": ("BOOLEAN", {"default": defaults["use_tiny_vae"], "tooltip": "Use a TinyVAE model for faster decoding with slight quality tradeoff."}),
+                "cfg_type": (["none", "full", "self", "initialize"], {"default": defaults["cfg_type"], "tooltip": "Classifier-Free Guidance type to control how guidance is applied."}),
+                "use_lcm_lora": ("BOOLEAN", {"default": True, "tooltip": "Enable use of LCM-LoRA for latent consistency."}),
+                "seed": ("INT", {"default": defaults["seed"], "min": -1, "max": 100000000, "tooltip": "Seed for generation. Use -1 for random seed."}),
             },
             "optional": {
-                "opt_lora_dict": ("LORA_DICT",),
-                "opt_acceleration_config": ("ACCELERATION_CONFIG",),
-                "opt_similarity_filter_config": ("SIMILARITY_FILTER_CONFIG",),
-                # "opt_lcm_lora_path": ("LCM_LORA_PATH",),
+                "opt_lora_dict": ("LORA_DICT", {"tooltip": "Optional dictionary of LoRA models to apply."}),
+                "opt_acceleration_config": ("ACCELERATION_CONFIG", {"tooltip": "Optional acceleration configuration to fine-tune performance settings."}),
+                "opt_similarity_filter_config": ("SIMILARITY_FILTER_CONFIG", {"tooltip": "Optional similarity filter configuration to filter out similar images."}),
+                 # "opt_lcm_lora_path": ("LCM_LORA_PATH",),
                 # "opt_vae_path": ("VAE_PATH",),
+                "opt_device_config": ("DEVICE_CONFIG", {"tooltip": "Optional device and engine configuration settings."}),
             }
         }
 
     RETURN_TYPES = ("STREAM_MODEL",)
+    OUTPUT_TOOLTIPS = ("The configured StreamDiffusion model.",)
     FUNCTION = "load_model"
     CATEGORY = "StreamDiffusion"
+    DESCRIPTION = "Configures and initializes the StreamDiffusion model with specified settings for generation."
 
     def load_model(self, model, t_index_list, mode, width, height, acceleration, 
-                  frame_buffer_size, use_tiny_vae, cfg_type, use_lcm_lora,
+                  frame_buffer_size, use_tiny_vae, cfg_type, use_lcm_lora, seed,
                   opt_lora_dict=None, opt_acceleration_config=None,
-                  opt_similarity_filter_config=None,
                   #opt_lcm_lora_path=None, opt_vae_path=None,
-                  ):
+                  opt_similarity_filter_config=None, opt_device_config=None):
         
         t_index_list = [int(x.strip()) for x in t_index_list.split(",")]
         
@@ -279,11 +276,7 @@ class StreamDiffusionConfig:
             "use_tiny_vae": use_tiny_vae,
             "cfg_type": cfg_type,
             "use_lcm_lora": use_lcm_lora,
-            "device": "cuda",
-            "dtype": torch.float16,
-            "output_type": "pil",
-            "do_add_noise": True,
-            "use_denoising_batch": True,
+            "seed": seed,
         }
 
         if opt_lora_dict:
@@ -303,6 +296,10 @@ class StreamDiffusionConfig:
         if opt_similarity_filter_config:
             config.update(opt_similarity_filter_config)
 
+        # Add device config if provided
+        if opt_device_config:
+            config.update(opt_device_config)
+
         engine_dir = get_engine_dir(model)
         wrapper = StreamDiffusionWrapper(**config)
 
@@ -313,21 +310,23 @@ class StreamDiffusionAccelerationSampler:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "stream_model": ("STREAM_MODEL",),
-                "prompt": ("STRING", {"default": "", "multiline": True}),
-                "negative_prompt": ("STRING", {"default": "", "multiline": True}),
-                "num_inference_steps": ("INT", {"default": 50, "min": 1, "max": 100}),
-                "guidance_scale": ("FLOAT", {"default": 1.2, "min": 0.1, "max": 20.0}),
-                "delta": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0}),
+                "stream_model": ("STREAM_MODEL", {"tooltip": "The configured StreamDiffusion model to use for generation."}),
+                "prompt": ("STRING", {"default": "", "multiline": True, "tooltip": "The text prompt to guide image generation."}),
+                "negative_prompt": ("STRING", {"default": "", "multiline": True, "tooltip": "Text prompt specifying undesired aspects to avoid in the generated image."}),
+                "num_inference_steps": ("INT", {"default": 50, "min": 1, "max": 100, "tooltip": "The number of denoising steps. More steps often yield better results but take longer."}),
+                "guidance_scale": ("FLOAT", {"default": 1.2, "min": 0.1, "max": 20.0, "tooltip": "Controls the strength of the guidance. Higher values make the image more closely match the prompt."}),
+                "delta": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "tooltip": "Delta multiplier for virtual residual noise, affecting image diversity."}),
             },
             "optional": {
-                "image": ("IMAGE",),
+                "image": ("IMAGE", {"tooltip": "The input image for image-to-image generation mode."}),
             }
         }
 
     RETURN_TYPES = ("IMAGE",)
+    OUTPUT_TOOLTIPS = ("The generated image.",)
     FUNCTION = "generate"
     CATEGORY = "StreamDiffusion"
+    DESCRIPTION = "Generates images using the configured StreamDiffusion model and specified prompts and settings."
 
     def generate(self, stream_model, prompt, negative_prompt, num_inference_steps, 
                 guidance_scale, delta, image=None):
@@ -368,10 +367,10 @@ NODE_CLASS_MAPPINGS = {
     "StreamDiffusionConfig": StreamDiffusionConfig,
     "StreamDiffusionAccelerationSampler": StreamDiffusionAccelerationSampler,
     "StreamDiffusionLoraLoader": StreamDiffusionLoraLoader,
-    # "StreamDiffusionLcmLoraLoader": StreamDiffusionLcmLoraLoader,
     # "StreamDiffusionVaeLoader": StreamDiffusionVaeLoader,
     "StreamDiffusionAccelerationConfig": StreamDiffusionAccelerationConfig,
     "StreamDiffusionSimilarityFilterConfig": StreamDiffusionSimilarityFilterConfig,
+    "StreamDiffusionDeviceConfig": StreamDiffusionDeviceConfig,
     "StreamDiffusionModelLoader": StreamDiffusionModelLoader,
 }
 
@@ -379,9 +378,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "StreamDiffusionConfig": "StreamDiffusionConfig",
     "StreamDiffusionAccelerationSampler": "StreamDiffusionAccelerationSampler",
     "StreamDiffusionLoraLoader": "StreamDiffusionLoraLoader",
-    # "StreamDiffusionLcmLoraLoader": "StreamDiffusionLcmLoraLoader",
     # "StreamDiffusionVaeLoader": "StreamDiffusionVaeLoader",
     "StreamDiffusionAccelerationConfig": "StreamDiffusionAccelerationConfig",
     "StreamDiffusionSimilarityFilterConfig": "StreamDiffusionSimilarityFilterConfig", 
+    "StreamDiffusionDeviceConfig": "StreamDiffusionDeviceConfig",
     "StreamDiffusionModelLoader": "StreamDiffusionModelLoader",
 }
