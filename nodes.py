@@ -230,13 +230,17 @@ class StreamDiffusionConfig:
             "required": {
                 "model": ("STREAMDIFFUSION_MODEL", {"tooltip": "The StreamDiffusion model to use for generation."}),
                 "t_index_list": ("STRING", {"default": "39,35,30", "tooltip": "Comma-separated list of t_index values determining at which steps to output images."}),
-                "mode": (["img2img", "txt2img"], {"default": defaults["mode"], "tooltip": "Generation mode: image-to-image or text-to-image."}),
+                "mode": (["img2img", "txt2img"], {"default": defaults["mode"], "tooltip": "Generation mode: image-to-image or text-to-image. NoteL txt2img requires cfg_type of 'none'"}),
                 "width": ("INT", {"default": defaults["width"], "min": 64, "max": 2048, "tooltip": "The width of the generated images."}),
                 "height": ("INT", {"default": defaults["height"], "min": 64, "max": 2048, "tooltip": "The height of the generated images."}),
                 "acceleration": (["none", "xformers", "tensorrt"], {"default": defaults["acceleration"], "tooltip": "Acceleration method to optimize performance."}),
                 "frame_buffer_size": ("INT", {"default": defaults["frame_buffer_size"], "min": 1, "max": 16, "tooltip": "Size of the frame buffer for batch denoising. Increasing this can improve performance at the cost of higher memory usage."}),
                 "use_tiny_vae": ("BOOLEAN", {"default": defaults["use_tiny_vae"], "tooltip": "Use a TinyVAE model for faster decoding with slight quality tradeoff."}),
-                "cfg_type": (["none", "full", "self", "initialize"], {"default": defaults["cfg_type"], "tooltip": "Classifier-Free Guidance type to control how guidance is applied."}),
+                "cfg_type": (["none", "full", "self", "initialize"], {"default": defaults["cfg_type"], "tooltip": """Classifier-Free Guidance type to control how guidance is applied:
+- none: No guidance, fastest but may reduce quality
+- full: Full guidance on every step, highest quality but slowest
+- self: Self-guidance using previous frame, good balance of speed/quality
+- initialize: Only apply guidance on first frame, fast with decent quality"""}),
                 "use_lcm_lora": ("BOOLEAN", {"default": True, "tooltip": "Enable use of LCM-LoRA for latent consistency."}),
                 "seed": ("INT", {"default": defaults["seed"], "min": -1, "max": 100000000, "tooltip": "Seed for generation. Use -1 for random seed."}),
             },
@@ -314,8 +318,8 @@ class StreamDiffusionAccelerationSampler:
                 "prompt": ("STRING", {"default": "", "multiline": True, "tooltip": "The text prompt to guide image generation."}),
                 "negative_prompt": ("STRING", {"default": "", "multiline": True, "tooltip": "Text prompt specifying undesired aspects to avoid in the generated image."}),
                 "num_inference_steps": ("INT", {"default": 50, "min": 1, "max": 100, "tooltip": "The number of denoising steps. More steps often yield better results but take longer."}),
-                "guidance_scale": ("FLOAT", {"default": 1.2, "min": 0.1, "max": 20.0, "tooltip": "Controls the strength of the guidance. Higher values make the image more closely match the prompt."}),
-                "delta": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "tooltip": "Delta multiplier for virtual residual noise, affecting image diversity."}),
+                "guidance_scale": ("FLOAT", {"default": 1.2, "min": 0.1, "max": 20.0, "step": 0.01, "tooltip": "Controls the strength of the guidance. Higher values make the image more closely match the prompt."}),
+                "delta": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 3.0, "step": 0.1, "tooltip": "Delta multiplier for virtual residual noise, affecting image diversity."}),
             },
             "optional": {
                 "image": ("IMAGE", {"tooltip": "The input image for image-to-image generation mode."}),
