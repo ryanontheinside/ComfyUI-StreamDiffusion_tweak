@@ -345,18 +345,29 @@ class StreamDiffusionAccelerationSampler:
 
         # Warmup loop for img2img mode
         if stream_model.mode == "img2img" and image is not None:
-            image_tensor = stream_model.preprocess_image(
-                Image.fromarray((image[0].numpy() * 255).astype(np.uint8))
-            )
-            # Perform warmup iterations
-            for _ in range(stream_model.batch_size - 1):
-                stream_model(image=image_tensor)
-            # Final generation
-            output = stream_model(image=image_tensor)
+            # Handle batch of images
+            batch_size = image.shape[0]
+            outputs = []
+            
+            for i in range(batch_size):
+                # Process each image in the batch
+                image_tensor = stream_model.preprocess_image(
+                    Image.fromarray((image[i].numpy() * 255).astype(np.uint8))
+                )
+                # Perform warmup iterations for each image
+                for _ in range(stream_model.batch_size - 1):
+                    stream_model(image=image_tensor)
+                # Final generation
+                output = stream_model(image=image_tensor)
+                outputs.append(output)
+            
+            # Stack outputs into a single batch
+            output_array = np.stack([np.array(img) for img in outputs], axis=0)
         else:
             output = stream_model.txt2img()
-        
-        output_array = np.array(output)
+            output_array = np.array(output)
+            if len(output_array.shape) == 3:  # Single image
+                output_array = np.expand_dims(output_array, 0)
         
         # Convert to tensor and normalize to 0-1 range
         output_tensor = torch.from_numpy(output_array).float() / 255.0
