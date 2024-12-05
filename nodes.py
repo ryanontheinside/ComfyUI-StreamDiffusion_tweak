@@ -9,7 +9,7 @@ import inspect
 from PIL import Image
 
 # Define constants for model paths
-MODELS_ROOT = os.path.expanduser("/home/ryan/models")
+MODELS_ROOT = os.path.expanduser("/home/pedro/workspace/comfyRealtime/ComfyUI/models")
 
 def get_engine_dir(model_id: str) -> str:
     """Get the engine directory for a specific model"""
