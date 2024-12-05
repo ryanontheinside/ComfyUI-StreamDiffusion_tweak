@@ -7,9 +7,10 @@ import numpy as np
 from .streamdiffusionwrapper import StreamDiffusionWrapper
 import inspect
 from PIL import Image
+import folder_paths
 
 # Define constants for model paths
-MODELS_ROOT = os.path.expanduser("/home/pedro/workspace/comfyRealtime/ComfyUI/models")
+MODELS_ROOT = folder_paths.models_dir
 
 def get_engine_dir(model_id: str) -> str:
     """Get the engine directory for a specific model"""
