@@ -8,48 +8,8 @@ from .streamdiffusionwrapper import StreamDiffusionWrapper
 import inspect
 from PIL import Image
 
-# Define constants for model paths
-MODELS_ROOT = os.path.expanduser("/home/ryan/models")
 
-def get_engine_dir(model_id: str) -> str:
-    """Get the engine directory for a specific model"""
-    # Handle full snapshot paths
-    if "snapshots" in model_id:
-        if "KBlueLeaf--kohaku-v2.1" in model_id:
-            model_name = "KBlueLeaf"
-        elif "stabilityai--sd-turbo" in model_id:
-            model_name = "stabilityai"
-        else:
-            model_name = model_id.split('/')[-1]  # fallback behavior
-    # Handle huggingface-style IDs
-    elif model_id == "stabilityai/sd-turbo":
-        model_name = "stabilityai"
-    elif model_id == "KBlueLeaf/kohaku-v2.1":
-        model_name = "KBlueLeaf"
-    else:
-        model_name = model_id.split('/')[-1]  # fallback behavior
-        
-    engine_dir = os.path.join(MODELS_ROOT, "StreamDiffusion--engines", model_name)
-    print(f"Using engine directory: {engine_dir}")  # Debug print
-    return engine_dir
-
-def get_model_path(model_id: str) -> str:
-    """Helper function to get the correct model path including snapshots"""
-    base_path = os.path.join(MODELS_ROOT, f"models--{model_id.replace('/', '--')}")
-    if not os.path.exists(base_path):
-        return model_id
-        
-    # Get the snapshot directory
-    snapshots_dir = os.path.join(base_path, "snapshots")
-    if not os.path.exists(snapshots_dir):
-        return model_id
-        
-    # Get the first (and usually only) snapshot directory
-    snapshot_dirs = os.listdir(snapshots_dir)
-    if not snapshot_dirs:
-        return model_id
-        
-    return os.path.join(snapshots_dir, snapshot_dirs[0])
+ENGINE_DIR = os.path.join(folder_paths.models_dir, "StreamDiffusion--engines")
 
 def get_wrapper_defaults(param_names):
     """Helper function to get default values from StreamDiffusionWrapper parameters
@@ -59,7 +19,51 @@ def get_wrapper_defaults(param_names):
         dict: Dictionary of parameter names and their default values
     """
     wrapper_params = inspect.signature(StreamDiffusionWrapper).parameters
-    return {name: wrapper_params[name].default for name in param_names if name in wrapper_params}
+    defaults = {}
+    for name in param_names:
+        if name not in wrapper_params:
+            continue
+        #override engine_dir to be the models/StreamDiffusion--engines directory as opposed to the wrapper's default
+        if name == 'engine_dir': 
+            defaults[name] = os.path.join(folder_paths.models_dir, 'StreamDiffusion--engines')
+        else:
+            defaults[name] = wrapper_params[name].default
+    return defaults
+
+def get_engine_configs():
+    """Scan StreamDiffusion--engines directory for available engine configurations"""
+    if not os.path.exists(ENGINE_DIR):
+        return []
+    
+    configs = []
+    # Look for parent directories that contain complete engine sets
+    for parent_dir in os.listdir(ENGINE_DIR):
+        parent_path = os.path.join(ENGINE_DIR, parent_dir)
+        if not os.path.isdir(parent_path):
+            continue
+            
+        # Look for subdirectories containing the engines
+        has_unet = False
+        has_vae = False
+        
+        for subdir in os.listdir(parent_path):
+            subdir_path = os.path.join(parent_path, subdir)
+            if not os.path.isdir(subdir_path):
+                continue
+                
+            # Check for engines
+            if os.path.exists(os.path.join(subdir_path, "unet.engine")):
+                has_unet = True
+            if os.path.exists(os.path.join(subdir_path, "vae_encoder.engine")) and \
+               os.path.exists(os.path.join(subdir_path, "vae_decoder.engine")):
+                has_vae = True
+        
+        # Only add if we found both UNet and VAE engines
+        if has_unet and has_vae:
+            configs.append(parent_dir)
+    
+    return configs
+
 
 class StreamDiffusionLoraLoader:
     @classmethod
@@ -67,7 +71,7 @@ class StreamDiffusionLoraLoader:
         return {
             "required": {
                 "lora_name": (folder_paths.get_filename_list("loras"), {"tooltip": "The name of the LoRA model to load."}),
-                "strength": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 10.0, "step": 0.01, "tooltip": "The strength scale for the LoRA model. Higher values result in greater influence of the LoRA on the output."}),
+                "strength": ("FLOAT", {"default": 0.5, "min": -10.0, "max": 10.0, "step": 0.01, "tooltip": "The strength scale for the LoRA model. Higher values result in greater influence of the LoRA on the output."}),
             },
             "optional": {
                 "previous_loras": ("LORA_DICT", {"tooltip": "Optional dictionary of previously loaded LoRAs to which the new LoRA will be added. Use this to combine multiple LoRAs."}),
@@ -90,8 +94,6 @@ class StreamDiffusionLoraLoader:
         
         return (lora_dict,)
 
-# "latent-consistency/lcm-lora-sdv1-5"
-
 class StreamDiffusionVaeLoader:
     @classmethod
     def INPUT_TYPES(s):
@@ -108,6 +110,23 @@ class StreamDiffusionVaeLoader:
     def load_vae(self, vae_name):
         vae_path = folder_paths.get_full_path("vae", vae_name)
         return (vae_path,)
+
+class StreamDiffusionCheckpointLoader:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "checkpoint": (folder_paths.get_filename_list("checkpoints"), ),
+            }
+        }
+
+    RETURN_TYPES = ("STREAMDIFFUSION_MODEL",)
+    FUNCTION = "load_checkpoint"
+    CATEGORY = "StreamDiffusion"
+
+    def load_checkpoint(self, checkpoint):
+        checkpoint_path = folder_paths.get_full_path("checkpoints", checkpoint)
+        return (checkpoint_path,)
 
 class StreamDiffusionAccelerationConfig:
     @classmethod
@@ -169,11 +188,11 @@ class StreamDiffusionDeviceConfig:
         defaults = get_wrapper_defaults(["device", "device_ids", "dtype", "use_safety_checker", "engine_dir"])
         return {
             "required": {
-                "device": (["cuda", "cpu"], {"default": "cuda", "tooltip": "Device to run inference on. CPU will be significantly slower."}),
-                "dtype": (["float16", "float32"], {"default": "float16", "tooltip": "Data type for inference. float16 uses less memory but may be less precise."}),
-                "device_ids": ("STRING", {"default": "", "tooltip": "Comma-separated list of device IDs for multi-GPU support. Leave empty for single GPU."}),
-                "use_safety_checker": ("BOOLEAN", {"default": False, "tooltip": "Enable safety checker to filter NSFW content. May impact performance."}),
-                "engine_dir": ("STRING", {"default": "engines", "tooltip": "Directory for TensorRT engine files when using tensorrt acceleration."}),
+                "device": (["cuda", "cpu"], {"default": defaults["device"], "tooltip": "Device to run inference on. CPU will be significantly slower."}),
+                "dtype": (["float16", "float32"], {"default": "float16" if defaults["dtype"] == torch.float16 else "float32", "tooltip": "Data type for inference. float16 uses less memory but may be less precise."}),
+                "device_ids": ("STRING", {"default": str(defaults["device_ids"] or ""), "tooltip": "Comma-separated list of device IDs for multi-GPU support. Leave empty for single GPU."}),
+                "use_safety_checker": ("BOOLEAN", {"default": defaults["use_safety_checker"], "tooltip": "Enable safety checker to filter NSFW content. May impact performance."}),
+                "engine_dir": ("STRING", {"default": defaults["engine_dir"], "tooltip": "Directory for TensorRT engine files when using tensorrt acceleration."}),
             }
         }
 
@@ -195,36 +214,52 @@ class StreamDiffusionDeviceConfig:
             "engine_dir": engine_dir,
         },)
 
-class StreamDiffusionModelLoader:
-    @classmethod
-    def INPUT_TYPES(s):
+class StreamDiffusionConfigMixin:
+    @staticmethod
+    def get_optional_inputs():
         return {
-            "required": {
-                "model_id_or_path": (["stabilityai/sd-turbo", "KBlueLeaf/kohaku-v2.1"], {"default": "stabilityai/sd-turbo", "tooltip": "The model identifier or path to the model to load for generation."}),
-            }
-        }   
+            "opt_lora_dict": ("LORA_DICT", {"tooltip": "Optional dictionary of LoRA models to apply."}),
+            "opt_acceleration_config": ("ACCELERATION_CONFIG", {"tooltip": "Optional acceleration configuration to fine-tune performance settings."}),
+            "opt_similarity_filter_config": ("SIMILARITY_FILTER_CONFIG", {"tooltip": "Optional similarity filter configuration to filter out similar images."}),
+            "opt_device_config": ("DEVICE_CONFIG", {"tooltip": "Optional device and engine configuration settings."}),
+            # "opt_lcm_lora_path": ("LCM_LORA_PATH",),
+            # "opt_vae_path": ("VAE_PATH",),
+        }
 
-    RETURN_TYPES = ("STREAMDIFFUSION_MODEL",)
-    OUTPUT_TOOLTIPS = ("The loaded StreamDiffusion model.",)
-    FUNCTION = "load_model"
-    CATEGORY = "StreamDiffusion"
-    DESCRIPTION = "Loads the specified StreamDiffusion model for use in generation."
+    @staticmethod
+    def apply_optional_configs(config, opt_lora_dict=None, opt_acceleration_config=None,
+                             opt_similarity_filter_config=None, opt_device_config=None):
+        if opt_lora_dict:
+            config["lora_dict"] = opt_lora_dict
 
-    def load_model(self, model_id_or_path):
-        if model_id_or_path in ["stabilityai/sd-turbo", "KBlueLeaf/kohaku-v2.1"]:
-            model_path = get_model_path(model_id_or_path)
-            if model_path != model_id_or_path:  # Only use local path if it exists
-                model_id_or_path = model_path
-                print(f"Using local model path: {model_path}")
-        return (model_id_or_path,)
+        if opt_acceleration_config:
+            config.update(opt_acceleration_config)
 
-class StreamDiffusionConfig:
+        if opt_similarity_filter_config:
+            config.update(opt_similarity_filter_config)
+
+        if opt_device_config:
+            config.update(opt_device_config)
+
+        # if opt_lcm_lora_path:
+        #     config["lcm_lora_id"] = opt_lcm_lora_path
+
+        # if opt_vae_path is not None:
+        #     config["vae_id"] = opt_vae_path.strip() if opt_vae_path.strip() else None
+        
+        return config
+
+    @staticmethod
+    def get_base_config():
+        return get_wrapper_defaults([
+            "mode", "width", "height", "acceleration", "frame_buffer_size",
+            "use_tiny_vae", "cfg_type", "seed", "engine_dir"
+        ])  
+
+class StreamDiffusionConfig(StreamDiffusionConfigMixin):
     @classmethod
     def INPUT_TYPES(s):
-        defaults = get_wrapper_defaults([
-            "mode", "width", "height", "acceleration", "frame_buffer_size",
-            "use_tiny_vae", "cfg_type", "seed"
-        ])
+        defaults = s.get_base_config()
         
         return {
             "required": {
@@ -244,14 +279,7 @@ class StreamDiffusionConfig:
                 "use_lcm_lora": ("BOOLEAN", {"default": True, "tooltip": "Enable use of LCM-LoRA for latent consistency."}),
                 "seed": ("INT", {"default": defaults["seed"], "min": -1, "max": 100000000, "tooltip": "Seed for generation. Use -1 for random seed."}),
             },
-            "optional": {
-                "opt_lora_dict": ("LORA_DICT", {"tooltip": "Optional dictionary of LoRA models to apply."}),
-                "opt_acceleration_config": ("ACCELERATION_CONFIG", {"tooltip": "Optional acceleration configuration to fine-tune performance settings."}),
-                "opt_similarity_filter_config": ("SIMILARITY_FILTER_CONFIG", {"tooltip": "Optional similarity filter configuration to filter out similar images."}),
-                 # "opt_lcm_lora_path": ("LCM_LORA_PATH",),
-                # "opt_vae_path": ("VAE_PATH",),
-                "opt_device_config": ("DEVICE_CONFIG", {"tooltip": "Optional device and engine configuration settings."}),
-            }
+            "optional": s.get_optional_inputs()
         }
 
     RETURN_TYPES = ("STREAM_MODEL",)
@@ -262,13 +290,11 @@ class StreamDiffusionConfig:
 
     def load_model(self, model, t_index_list, mode, width, height, acceleration, 
                   frame_buffer_size, use_tiny_vae, cfg_type, use_lcm_lora, seed,
-                  opt_lora_dict=None, opt_acceleration_config=None,
-                  #opt_lcm_lora_path=None, opt_vae_path=None,
-                  opt_similarity_filter_config=None, opt_device_config=None):
+                  **optional_configs):
         
         t_index_list = [int(x.strip()) for x in t_index_list.split(",")]
         
-        # Build base configuration with all current parameters
+        # Build base configuration
         config = {
             "model_id_or_path": model,
             "t_index_list": t_index_list,
@@ -281,30 +307,18 @@ class StreamDiffusionConfig:
             "cfg_type": cfg_type,
             "use_lcm_lora": use_lcm_lora,
             "seed": seed,
+            "engine_dir": self.get_base_config()["engine_dir"]
         }
 
-        if opt_lora_dict:
-            config["lora_dict"] = opt_lora_dict
+        # Apply optional configs using mixin method
+        config = self.apply_optional_configs(config, **optional_configs)
 
-        # if opt_lcm_lora_path:
-        #     config["lcm_lora_id"] = opt_lcm_lora_path
-
-        # if opt_vae_path is not None:
-        #     config["vae_id"] = opt_vae_path.strip() if opt_vae_path.strip() else None
-
-        # Add acceleration config if provided
-        if opt_acceleration_config:
-            config.update(opt_acceleration_config)
-
-        # Add similarity filter config if provided
-        if opt_similarity_filter_config:
-            config.update(opt_similarity_filter_config)
-
-        # Add device config if provided
-        if opt_device_config:
-            config.update(opt_device_config)
-
-        engine_dir = get_engine_dir(model)
+        model_name = os.path.splitext(os.path.basename(model))[0] if os.path.isfile(model) else model.split('/')[-1]
+        parent_name = f"{model_name}--lcm_lora-{use_lcm_lora}--tiny_vae-{use_tiny_vae}--mode-{mode}--t_index-{len(t_index_list)}--buffer-{frame_buffer_size}"
+        config["engine_dir"] = os.path.join(
+            config["engine_dir"],
+            parent_name
+        )
         wrapper = StreamDiffusionWrapper(**config)
 
         return (wrapper,)
@@ -376,7 +390,73 @@ class StreamDiffusionAccelerationSampler:
         if len(output_tensor.shape) == 3:  # If HWC
             output_tensor = output_tensor.unsqueeze(0)  # Add batch dimension -> BHWC
         
-        return (output_tensor,)
+        return (output_tensor,)   
+
+class StreamDiffusionPrebuiltConfig(StreamDiffusionConfigMixin):
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "engine_config": (get_engine_configs(), {"tooltip": "Select from available prebuilt engine configurations"}),
+                "t_index_list": ("STRING", {"default": "39,35,30", "tooltip": "Comma-separated list of t_index values. Must match the number of steps used to build the engine."}),
+            },
+            "optional": s.get_optional_inputs()
+        }
+
+    RETURN_TYPES = ("STREAM_MODEL",)
+    FUNCTION = "configure_model"
+    CATEGORY = "StreamDiffusion"
+    DESCRIPTION = "Configures StreamDiffusion to use existing TensorRT engines"
+
+    def configure_model(self, engine_config, t_index_list, **optional_configs):
+        # Parse configuration from the parent directory name
+        config_parts = engine_config.split('--')
+        
+        # First part is the model name
+        model_name = config_parts[0]
+        # Convert model name back to path if it's a local file
+        if os.path.exists(os.path.join(folder_paths.models_dir, "checkpoints", f"{model_name}.safetensors")):
+            model_path = os.path.join(folder_paths.models_dir, "checkpoints", f"{model_name}.safetensors")
+        else:
+            model_path = model_name  # Assume it's a model ID if not a local file
+
+        # Parse t_index_list
+        t_indices = [int(x.strip()) for x in t_index_list.split(",")]
+        
+        # Extract engine parameters to validate t_index_list length
+        engine_params = {}
+        for part in config_parts[1:]:
+            key, value = part.split('-', 1)
+            if key == 't_index':
+                engine_steps = int(value)
+                if len(t_indices) != engine_steps:
+                    raise ValueError(f"t_index_list length ({len(t_indices)}) must match the number of steps ({engine_steps}) used to build the engine")
+            elif key == 'buffer':
+                engine_params['frame_buffer_size'] = int(value)
+            elif key == 'lcm_lora':
+                engine_params['use_lcm_lora'] = value.lower() == 'true'
+            elif key == 'tiny_vae':
+                engine_params['use_tiny_vae'] = value.lower() == 'true'
+            elif key == 'mode':
+                engine_params['mode'] = value
+                engine_params['cfg_type'] = "none" if value == "txt2img" else "self"
+        
+        config = {
+            "model_id_or_path": model_path,
+            "t_index_list": t_indices,
+            "acceleration": "tensorrt",
+            "width": 512,
+            "height": 512,
+            "use_denoising_batch": True,
+            "engine_dir": os.path.join(folder_paths.models_dir, 'StreamDiffusion--engines', engine_config),
+            **engine_params
+        }
+
+        # Apply optional configs using mixin method
+        config = self.apply_optional_configs(config, **optional_configs)
+
+        wrapper = StreamDiffusionWrapper(**config)
+        return (wrapper,)
 
 NODE_CLASS_MAPPINGS = {
     "StreamDiffusionConfig": StreamDiffusionConfig,
@@ -386,7 +466,8 @@ NODE_CLASS_MAPPINGS = {
     "StreamDiffusionAccelerationConfig": StreamDiffusionAccelerationConfig,
     "StreamDiffusionSimilarityFilterConfig": StreamDiffusionSimilarityFilterConfig,
     "StreamDiffusionDeviceConfig": StreamDiffusionDeviceConfig,
-    "StreamDiffusionModelLoader": StreamDiffusionModelLoader,
+    "StreamDiffusionCheckpointLoader": StreamDiffusionCheckpointLoader,
+    "StreamDiffusionPrebuiltConfig": StreamDiffusionPrebuiltConfig,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -397,5 +478,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "StreamDiffusionAccelerationConfig": "StreamDiffusionAccelerationConfig",
     "StreamDiffusionSimilarityFilterConfig": "StreamDiffusionSimilarityFilterConfig", 
     "StreamDiffusionDeviceConfig": "StreamDiffusionDeviceConfig",
-    "StreamDiffusionModelLoader": "StreamDiffusionModelLoader",
+    "StreamDiffusionCheckpointLoader": "StreamDiffusionCheckpointLoader",
+    "StreamDiffusionPrebuiltConfig": "StreamDiffusionPrebuiltConfig",
 }
