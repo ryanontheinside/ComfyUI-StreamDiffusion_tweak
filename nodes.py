@@ -7,6 +7,7 @@ import numpy as np
 from .streamdiffusionwrapper import StreamDiffusionWrapper
 import inspect
 from PIL import Image
+import time
 
 
 ENGINE_DIR = os.path.join(folder_paths.models_dir, "StreamDiffusion--engines")
@@ -229,9 +230,11 @@ class StreamDiffusionDeviceConfig:
             "engine_dir": engine_dir,
         },)
 
-
-
 class StreamDiffusionAccelerationSampler:
+    # Add class-level storage
+    _current_model = None
+    _current_config = None
+    
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -254,51 +257,136 @@ class StreamDiffusionAccelerationSampler:
     CATEGORY = "StreamDiffusion"
     DESCRIPTION = "Generates images using the configured StreamDiffusion model and specified prompts and settings."
 
+    def __init__(self):
+        self.profile_file = "/home/ryan/comfyRealtime/ComfyUI/custom_nodes/ComfyUI-StreamDiffusion_tweak/profiling.txt"
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(self.profile_file), exist_ok=True)
+
+    def log_profile(self, message):
+        with open(self.profile_file, 'a') as f:
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+            f.write(f"[{timestamp}] {message}\n")
+    
+    def get_model_config(self, stream_model, prompt, negative_prompt, num_inference_steps, 
+                        guidance_scale, delta):
+        """Create a configuration dictionary for comparing model states"""
+        return {
+            'model_id': getattr(stream_model, 'model_id_or_path', None),
+            'mode': getattr(stream_model, 'mode', None),
+            'acceleration': getattr(stream_model, 'acceleration', None),
+            'frame_buffer_size': getattr(stream_model, 'frame_buffer_size', None),
+            'width': getattr(stream_model, 'width', None),
+            'height': getattr(stream_model, 'height', None),
+            'prompt': prompt,
+            'negative_prompt': negative_prompt,
+            'num_inference_steps': num_inference_steps,
+            'guidance_scale': guidance_scale,
+            'delta': delta
+        }
+
     def generate(self, stream_model, prompt, negative_prompt, num_inference_steps, 
                 guidance_scale, delta, image=None):
         
-        stream_model.prepare(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            num_inference_steps=num_inference_steps,
-            guidance_scale=guidance_scale,
-            delta=delta
-        )
+        start_time = time.perf_counter()
+        self.log_profile(f"\n=== New Generation ===")
+        
+        # Create current configuration
+        current_config = self.get_model_config(stream_model, prompt, negative_prompt, 
+                                             num_inference_steps, guidance_scale, delta)
+        
+        # Check if we need to update the model
+        new_model = self.__class__._current_model is None or self.__class__._current_config != current_config
+        if (new_model):
+            self.log_profile("Model configuration changed or first run - initializing model")
+            self.__class__._current_model = stream_model
+            self.__class__._current_config = current_config
+            
+            # Time the preparation step
+            prep_start = time.perf_counter()
+            stream_model.prepare(
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+                delta=delta
+            )
+            prep_time = time.perf_counter() - prep_start
+            self.log_profile(f"Model preparation took {prep_time:.3f}s")
 
-        # Warmup loop for img2img mode
+        else:
+            self.log_profile("Using existing model configuration")
+            stream_model = self.__class__._current_model
+
         if stream_model.mode == "img2img" and image is not None:
             # Handle batch of images
             batch_size = image.shape[0]
             outputs = []
+            self.log_profile(f"Processing batch of {batch_size} images in img2img mode")
             
             for i in range(batch_size):
-                # Process each image in the batch
+                batch_start = time.perf_counter()
+                self.log_profile(f"Processing batch image {i+1}/{batch_size}")
+                
+                # Preprocess timing
+                preprocess_start = time.perf_counter()
                 image_tensor = stream_model.preprocess_image(
                     Image.fromarray((image[i].numpy() * 255).astype(np.uint8))
                 )
-                # Perform warmup iterations for each image
-                for _ in range(stream_model.batch_size - 1):
-                    stream_model(image=image_tensor)
-                # Final generation
+                preprocess_time = time.perf_counter() - preprocess_start
+                self.log_profile(f"Image preprocessing took {preprocess_time:.3f}s")
+
+                # Warmup timing
+                if new_model:
+                    warmup_start = time.perf_counter()
+                    for _ in range(stream_model.batch_size - 1):
+                        stream_model(image=image_tensor)
+                    warmup_time = time.perf_counter() - warmup_start
+                    self.log_profile(f"Warmup iterations ({stream_model.batch_size-1} steps) took {warmup_time:.3f}s")
+
+                # Generation timing
+                generation_start = time.perf_counter()
                 output = stream_model(image=image_tensor)
+                generation_time = time.perf_counter() - generation_start
+                self.log_profile(f"Image generation took {generation_time:.3f}s")
+                
                 outputs.append(output)
+                batch_total = time.perf_counter() - batch_start
+                self.log_profile(f"Batch {i+1} completed in {batch_total:.3f}s")
             
-            # Stack outputs into a single batch
+            # Stack outputs
+            stack_start = time.perf_counter()
             output_array = np.stack([np.array(img) for img in outputs], axis=0)
+            stack_time = time.perf_counter() - stack_start
+            self.log_profile(f"Output stacking took {stack_time:.3f}s")
+            
         else:
+            # Text to image generation
+            self.log_profile("Performing txt2img generation")
+            generation_start = time.perf_counter()
             output = stream_model.txt2img()
+            generation_time = time.perf_counter() - generation_start
+            self.log_profile(f"Txt2img generation took {generation_time:.3f}s")
+            
             output_array = np.array(output)
             if len(output_array.shape) == 3:  # Single image
                 output_array = np.expand_dims(output_array, 0)
         
-        # Convert to tensor and normalize to 0-1 range
+        # Convert to tensor and normalize
+        tensor_start = time.perf_counter()
         output_tensor = torch.from_numpy(output_array).float() / 255.0
         
         # Ensure BHWC format
         if len(output_tensor.shape) == 3:  # If HWC
             output_tensor = output_tensor.unsqueeze(0)  # Add batch dimension -> BHWC
+            
+        tensor_time = time.perf_counter() - tensor_start
+        self.log_profile(f"Tensor conversion took {tensor_time:.3f}s")
         
-        return (output_tensor,)   
+        total_time = time.perf_counter() - start_time
+        self.log_profile(f"Total generation time: {total_time:.3f}s")
+        self.log_profile("=== Generation Complete ===\n")
+        
+        return (output_tensor,)
 
 class StreamDiffusionConfigMixin:
     @staticmethod
@@ -387,7 +475,7 @@ class StreamDiffusionConfig(StreamDiffusionConfigMixin):
             "mode": mode,
             "width": width,
             "height": height,
-            "acceleration": acceleration,
+            "acceleration": "None",
             "frame_buffer_size": frame_buffer_size,
             "use_tiny_vae": use_tiny_vae,
             "cfg_type": cfg_type,
