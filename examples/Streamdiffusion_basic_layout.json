@@ -1,6 +1,6 @@
 {
-  "last_node_id": 65,
-  "last_link_id": 39,
+  "last_node_id": 66,
+  "last_link_id": 40,
   "nodes": [
     {
       "id": 64,
@@ -11,7 +11,7 @@
       ],
       "size": [
         519,
-        310
+        378
       ],
       "flags": {},
       "order": 3,
@@ -19,8 +19,8 @@
       "inputs": [
         {
           "name": "model",
-          "type": "STREAMDIFFUSION_MODEL",
-          "link": 37
+          "type": "SDMODEL",
+          "link": 40
         },
         {
           "name": "opt_lora_dict",
@@ -37,6 +37,12 @@
         {
           "name": "opt_similarity_filter_config",
           "type": "SIMILARITY_FILTER_CONFIG",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "opt_device_config",
+          "type": "DEVICE_CONFIG",
           "link": null,
           "shape": 7
         }
@@ -63,139 +69,10 @@
         1,
         true,
         "self",
-        true
-      ]
-    },
-    {
-      "id": 27,
-      "type": "LoadImage",
-      "pos": [
-        332,
-        510
-      ],
-      "size": [
-        315,
-        314
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [
-            33
-          ],
-          "slot_index": 0
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": null
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadImage"
-      },
-      "widgets_values": [
-        "headroom.jpeg",
-        "image"
-      ]
-    },
-    {
-      "id": 57,
-      "type": "StreamDiffusionAccelerationConfig",
-      "pos": [
-        354,
-        351
-      ],
-      "size": [
-        415.8000183105469,
-        106
-      ],
-      "flags": {},
-      "order": 1,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "ACCELERATION_CONFIG",
-          "type": "ACCELERATION_CONFIG",
-          "links": [
-            38
-          ],
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "StreamDiffusionAccelerationConfig"
-      },
-      "widgets_values": [
-        10,
         true,
-        true
+        66111582,
+        "randomize"
       ]
-    },
-    {
-      "id": 65,
-      "type": "StreamDiffusionModelLoader",
-      "pos": [
-        811,
-        360
-      ],
-      "size": [
-        327.5999755859375,
-        58
-      ],
-      "flags": {},
-      "order": 2,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "STREAMDIFFUSION_MODEL",
-          "type": "STREAMDIFFUSION_MODEL",
-          "links": [
-            37
-          ],
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "StreamDiffusionModelLoader"
-      },
-      "widgets_values": [
-        "KBlueLeaf/kohaku-v2.1"
-      ]
-    },
-    {
-      "id": 52,
-      "type": "PreviewImage",
-      "pos": [
-        1271,
-        580
-      ],
-      "size": [
-        210,
-        246
-      ],
-      "flags": {},
-      "order": 5,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 34
-        }
-      ],
-      "outputs": [],
-      "properties": {
-        "Node name for S&R": "PreviewImage"
-      },
-      "widgets_values": []
     },
     {
       "id": 61,
@@ -244,6 +121,137 @@
         1.2,
         1
       ]
+    },
+    {
+      "id": 27,
+      "type": "LoadImage",
+      "pos": [
+        207,
+        354
+      ],
+      "size": [
+        315,
+        314
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            33
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "headroom.jpeg",
+        "image"
+      ]
+    },
+    {
+      "id": 57,
+      "type": "StreamDiffusionAccelerationConfig",
+      "pos": [
+        167,
+        772
+      ],
+      "size": [
+        415.8000183105469,
+        106
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "ACCELERATION_CONFIG",
+          "type": "ACCELERATION_CONFIG",
+          "links": [
+            38
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "StreamDiffusionAccelerationConfig"
+      },
+      "widgets_values": [
+        10,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 66,
+      "type": "StreamDiffusionCheckpointLoader",
+      "pos": [
+        355,
+        166
+      ],
+      "size": [
+        390.5999755859375,
+        58
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "SDMODEL",
+          "type": "SDMODEL",
+          "links": [
+            40
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "StreamDiffusionCheckpointLoader"
+      },
+      "widgets_values": [
+        "kohaku-v2.1.safetensors"
+      ]
+    },
+    {
+      "id": 52,
+      "type": "PreviewImage",
+      "pos": [
+        1380,
+        612
+      ],
+      "size": [
+        210,
+        246
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 34
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": []
     }
   ],
   "links": [
@@ -264,14 +272,6 @@
       "IMAGE"
     ],
     [
-      37,
-      65,
-      0,
-      64,
-      0,
-      "STREAMDIFFUSION_MODEL"
-    ],
-    [
       38,
       57,
       0,
@@ -286,16 +286,24 @@
       61,
       0,
       "STREAM_MODEL"
+    ],
+    [
+      40,
+      66,
+      0,
+      64,
+      0,
+      "SDMODEL"
     ]
   ],
   "groups": [],
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.6209213230591554,
+      "scale": 0.6830134553650711,
       "offset": [
-        17.375774183473283,
-        -17.804558148437604
+        -2.020372675901857,
+        25.510644671874783
       ]
     }
   },

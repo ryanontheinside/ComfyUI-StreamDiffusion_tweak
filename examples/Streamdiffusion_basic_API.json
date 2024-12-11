@@ -52,8 +52,9 @@
       "use_tiny_vae": true,
       "cfg_type": "self",
       "use_lcm_lora": true,
+      "seed": 66111582,
       "model": [
-        "65",
+        "66",
         0
       ],
       "opt_acceleration_config": [
@@ -63,10 +64,10 @@
     },
     "class_type": "StreamDiffusionConfig"
   },
-  "65": {
+  "66": {
     "inputs": {
-      "model_id_or_path": "KBlueLeaf/kohaku-v2.1"
+      "checkpoint": "kohaku-v2.1.safetensors"
     },
-    "class_type": "StreamDiffusionModelLoader"
+    "class_type": "StreamDiffusionCheckpointLoader"
   }
 }

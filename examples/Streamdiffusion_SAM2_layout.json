@@ -1,6 +1,6 @@
 {
-  "last_node_id": 77,
-  "last_link_id": 63,
+  "last_node_id": 78,
+  "last_link_id": 64,
   "nodes": [
     {
       "id": 61,
@@ -14,7 +14,7 @@
         218
       ],
       "flags": {},
-      "order": 6,
+      "order": 7,
       "mode": 0,
       "inputs": [
         {
@@ -62,7 +62,7 @@
         26
       ],
       "flags": {},
-      "order": 7,
+      "order": 6,
       "mode": 0,
       "inputs": [
         {
@@ -98,7 +98,7 @@
         246
       ],
       "flags": {},
-      "order": 9,
+      "order": 8,
       "mode": 0,
       "inputs": [
         {
@@ -112,57 +112,6 @@
         "Node name for S&R": "PreviewImage"
       },
       "widgets_values": []
-    },
-    {
-      "id": 75,
-      "type": "Sam2RealtimeSegmentation",
-      "pos": [
-        557,
-        357
-      ],
-      "size": [
-        342.5999755859375,
-        126
-      ],
-      "flags": {},
-      "order": 5,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 60
-        },
-        {
-          "name": "sam2_model",
-          "type": "SAM2MODEL",
-          "link": 59
-        }
-      ],
-      "outputs": [
-        {
-          "name": "PROCESSED_IMAGES",
-          "type": "IMAGE",
-          "links": null
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": [
-            61,
-            63
-          ],
-          "slot_index": 1
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "Sam2RealtimeSegmentation"
-      },
-      "widgets_values": [
-        false,
-        "[[384,384]]",
-        "[[50,50]]"
-      ]
     },
     {
       "id": 74,
@@ -200,38 +149,6 @@
       ]
     },
     {
-      "id": 65,
-      "type": "StreamDiffusionModelLoader",
-      "pos": [
-        157,
-        176
-      ],
-      "size": [
-        327.5999755859375,
-        58
-      ],
-      "flags": {},
-      "order": 1,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "STREAMDIFFUSION_MODEL",
-          "type": "STREAMDIFFUSION_MODEL",
-          "links": [
-            37
-          ],
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "StreamDiffusionModelLoader"
-      },
-      "widgets_values": [
-        "KBlueLeaf/kohaku-v2.1"
-      ]
-    },
-    {
       "id": 57,
       "type": "StreamDiffusionAccelerationConfig",
       "pos": [
@@ -243,7 +160,7 @@
         106
       ],
       "flags": {},
-      "order": 2,
+      "order": 1,
       "mode": 0,
       "inputs": [],
       "outputs": [
@@ -274,16 +191,16 @@
       ],
       "size": [
         519,
-        310
+        378
       ],
       "flags": {},
-      "order": 4,
+      "order": 5,
       "mode": 0,
       "inputs": [
         {
           "name": "model",
-          "type": "STREAMDIFFUSION_MODEL",
-          "link": 37
+          "type": "SDMODEL",
+          "link": 64
         },
         {
           "name": "opt_lora_dict",
@@ -300,6 +217,12 @@
         {
           "name": "opt_similarity_filter_config",
           "type": "SIMILARITY_FILTER_CONFIG",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "opt_device_config",
+          "type": "DEVICE_CONFIG",
           "link": null,
           "shape": 7
         }
@@ -326,7 +249,9 @@
         1,
         true,
         "self",
-        true
+        true,
+        56461981,
+        "randomize"
       ]
     },
     {
@@ -341,7 +266,7 @@
         146
       ],
       "flags": {},
-      "order": 8,
+      "order": 9,
       "mode": 0,
       "inputs": [
         {
@@ -392,7 +317,7 @@
         314
       ],
       "flags": {},
-      "order": 3,
+      "order": 2,
       "mode": 0,
       "inputs": [],
       "outputs": [
@@ -446,17 +371,92 @@
         "Node name for S&R": "PreviewImage"
       },
       "widgets_values": []
+    },
+    {
+      "id": 78,
+      "type": "StreamDiffusionCheckpointLoader",
+      "pos": [
+        19,
+        166
+      ],
+      "size": [
+        390.5999755859375,
+        58
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "SDMODEL",
+          "type": "SDMODEL",
+          "links": [
+            64
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "StreamDiffusionCheckpointLoader"
+      },
+      "widgets_values": [
+        "sd_turbo.safetensors"
+      ]
+    },
+    {
+      "id": 75,
+      "type": "Sam2RealtimeSegmentation",
+      "pos": [
+        557,
+        357
+      ],
+      "size": [
+        342.5999755859375,
+        126
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 60
+        },
+        {
+          "name": "sam2_model",
+          "type": "SAM2MODEL",
+          "link": 59
+        }
+      ],
+      "outputs": [
+        {
+          "name": "PROCESSED_IMAGES",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [
+            61,
+            63
+          ],
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Sam2RealtimeSegmentation"
+      },
+      "widgets_values": [
+        "[[200,256]]",
+        "",
+        true
+      ]
     }
   ],
   "links": [
-    [
-      37,
-      65,
-      0,
-      64,
-      0,
-      "STREAMDIFFUSION_MODEL"
-    ],
     [
       38,
       57,
@@ -544,16 +544,24 @@
       73,
       2,
       "MASK"
+    ],
+    [
+      64,
+      78,
+      0,
+      64,
+      0,
+      "SDMODEL"
     ]
   ],
   "groups": [],
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.6209213230591554,
+      "scale": 0.6209213230591555,
       "offset": [
-        17.375774183473283,
-        -17.804558148437604
+        86.11844732409816,
+        79.82875467187483
       ]
     }
   },
