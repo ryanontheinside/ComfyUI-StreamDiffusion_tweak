@@ -52,8 +52,9 @@
       "use_tiny_vae": true,
       "cfg_type": "self",
       "use_lcm_lora": true,
+      "seed": 56461981,
       "model": [
-        "65",
+        "78",
         0
       ],
       "opt_acceleration_config": [
@@ -62,12 +63,6 @@
       ]
     },
     "class_type": "StreamDiffusionConfig"
-  },
-  "65": {
-    "inputs": {
-      "model_id_or_path": "KBlueLeaf/kohaku-v2.1"
-    },
-    "class_type": "StreamDiffusionModelLoader"
   },
   "73": {
     "inputs": {
@@ -100,9 +95,9 @@
   },
   "75": {
     "inputs": {
-      "reset_tracking": false,
-      "coordinates_positive": "[[384,384]]",
-      "coordinates_negative": "[[50,50]]",
+      "coordinates_positive": "[[200,256]]",
+      "coordinates_negative": "",
+      "reset_tracking": true,
       "images": [
         "27",
         0
@@ -114,22 +109,10 @@
     },
     "class_type": "Sam2RealtimeSegmentation"
   },
-  "76": {
+  "78": {
     "inputs": {
-      "images": [
-        "77",
-        0
-      ]
+      "checkpoint": "sd_turbo.safetensors"
     },
-    "class_type": "PreviewImage"
-  },
-  "77": {
-    "inputs": {
-      "mask": [
-        "75",
-        1
-      ]
-    },
-    "class_type": "MaskToImage"
+    "class_type": "StreamDiffusionCheckpointLoader"
   }
 }
