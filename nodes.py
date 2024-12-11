@@ -8,7 +8,10 @@ from .streamdiffusionwrapper import StreamDiffusionWrapper
 import inspect
 from PIL import Image
 import time
+import folder_paths
 
+# Define constants for model paths
+MODELS_ROOT = folder_paths.models_dir
 
 ENGINE_DIR = os.path.join(folder_paths.models_dir, "StreamDiffusion--engines")
 
