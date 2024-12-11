@@ -10,9 +10,6 @@ from PIL import Image
 import time
 import folder_paths
 
-# Define constants for model paths
-MODELS_ROOT = folder_paths.models_dir
-
 ENGINE_DIR = os.path.join(folder_paths.models_dir, "StreamDiffusion--engines")
 
 def get_wrapper_defaults(param_names):
@@ -145,6 +142,7 @@ class StreamDiffusionCheckpointLoader:
 
     def load_checkpoint(self, checkpoint):
         checkpoint_path = folder_paths.get_full_path("checkpoints", checkpoint)
+
         return (checkpoint_path,)
 
 class StreamDiffusionAccelerationConfig:
@@ -260,15 +258,15 @@ class StreamDiffusionAccelerationSampler:
     CATEGORY = "StreamDiffusion"
     DESCRIPTION = "Generates images using the configured StreamDiffusion model and specified prompts and settings."
 
-    def __init__(self):
-        self.profile_file = "/home/ryan/comfyRealtime/ComfyUI/custom_nodes/ComfyUI-StreamDiffusion_tweak/profiling.txt"
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(self.profile_file), exist_ok=True)
+    # def __init__(self):
+        # self.profile_file = "/home/ryan/comfyRealtime/ComfyUI/custom_nodes/ComfyUI-StreamDiffusion_tweak/profiling.txt"
+        # # Ensure directory exists
+        # os.makedirs(os.path.dirname(self.profile_file), exist_ok=True)
 
-    def log_profile(self, message):
-        with open(self.profile_file, 'a') as f:
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"[{timestamp}] {message}\n")
+    # def log_profile(self, message):
+    #     with open(self.profile_file, 'a') as f:
+    #         timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+    #         f.write(f"[{timestamp}] {message}\n")
     
     def get_model_config(self, stream_model, prompt, negative_prompt, num_inference_steps, 
                         guidance_scale, delta):
@@ -291,7 +289,7 @@ class StreamDiffusionAccelerationSampler:
                 guidance_scale, delta, image=None):
         
         start_time = time.perf_counter()
-        self.log_profile(f"\n=== New Generation ===")
+        # self.log_profile(f"\n=== New Generation ===")
         
         # Create current configuration
         current_config = self.get_model_config(stream_model, prompt, negative_prompt, 
@@ -300,7 +298,7 @@ class StreamDiffusionAccelerationSampler:
         # Check if we need to update the model
         new_model = self.__class__._current_model is None or self.__class__._current_config != current_config
         if (new_model):
-            self.log_profile("Model configuration changed or first run - initializing model")
+            # self.log_profile("Model configuration changed or first run - initializing model")
             self.__class__._current_model = stream_model
             self.__class__._current_config = current_config
             
@@ -314,21 +312,21 @@ class StreamDiffusionAccelerationSampler:
                 delta=delta
             )
             prep_time = time.perf_counter() - prep_start
-            self.log_profile(f"Model preparation took {prep_time:.3f}s")
+            # self.log_profile(f"Model preparation took {prep_time:.3f}s")
 
         else:
-            self.log_profile("Using existing model configuration")
+            # self.log_profile("Using existing model configuration")
             stream_model = self.__class__._current_model
 
         if stream_model.mode == "img2img" and image is not None:
             # Handle batch of images
             batch_size = image.shape[0]
             outputs = []
-            self.log_profile(f"Processing batch of {batch_size} images in img2img mode")
+            # self.log_profile(f"Processing batch of {batch_size} images in img2img mode")
             
             for i in range(batch_size):
                 batch_start = time.perf_counter()
-                self.log_profile(f"Processing batch image {i+1}/{batch_size}")
+                # self.log_profile(f"Processing batch image {i+1}/{batch_size}")
                 
                 # Preprocess timing
                 preprocess_start = time.perf_counter()
@@ -336,7 +334,7 @@ class StreamDiffusionAccelerationSampler:
                     Image.fromarray((image[i].numpy() * 255).astype(np.uint8))
                 )
                 preprocess_time = time.perf_counter() - preprocess_start
-                self.log_profile(f"Image preprocessing took {preprocess_time:.3f}s")
+                # self.log_profile(f"Image preprocessing took {preprocess_time:.3f}s")
 
                 # Warmup timing
                 if new_model:
@@ -344,31 +342,31 @@ class StreamDiffusionAccelerationSampler:
                     for _ in range(stream_model.batch_size - 1):
                         stream_model(image=image_tensor)
                     warmup_time = time.perf_counter() - warmup_start
-                    self.log_profile(f"Warmup iterations ({stream_model.batch_size-1} steps) took {warmup_time:.3f}s")
+                    # self.log_profile(f"Warmup iterations ({stream_model.batch_size-1} steps) took {warmup_time:.3f}s")
 
                 # Generation timing
                 generation_start = time.perf_counter()
                 output = stream_model(image=image_tensor)
                 generation_time = time.perf_counter() - generation_start
-                self.log_profile(f"Image generation took {generation_time:.3f}s")
+                # self.log_profile(f"Image generation took {generation_time:.3f}s")
                 
                 outputs.append(output)
                 batch_total = time.perf_counter() - batch_start
-                self.log_profile(f"Batch {i+1} completed in {batch_total:.3f}s")
+                # self.log_profile(f"Batch {i+1} completed in {batch_total:.3f}s")
             
             # Stack outputs
             stack_start = time.perf_counter()
             output_array = np.stack([np.array(img) for img in outputs], axis=0)
             stack_time = time.perf_counter() - stack_start
-            self.log_profile(f"Output stacking took {stack_time:.3f}s")
+            # self.log_profile(f"Output stacking took {stack_time:.3f}s")
             
         else:
             # Text to image generation
-            self.log_profile("Performing txt2img generation")
+            # self.log_profile("Performing txt2img generation")
             generation_start = time.perf_counter()
             output = stream_model.txt2img()
             generation_time = time.perf_counter() - generation_start
-            self.log_profile(f"Txt2img generation took {generation_time:.3f}s")
+            # self.log_profile(f"Txt2img generation took {generation_time:.3f}s")
             
             output_array = np.array(output)
             if len(output_array.shape) == 3:  # Single image
@@ -383,11 +381,11 @@ class StreamDiffusionAccelerationSampler:
             output_tensor = output_tensor.unsqueeze(0)  # Add batch dimension -> BHWC
             
         tensor_time = time.perf_counter() - tensor_start
-        self.log_profile(f"Tensor conversion took {tensor_time:.3f}s")
+        # self.log_profile(f"Tensor conversion took {tensor_time:.3f}s")
         
         total_time = time.perf_counter() - start_time
-        self.log_profile(f"Total generation time: {total_time:.3f}s")
-        self.log_profile("=== Generation Complete ===\n")
+        # self.log_profile(f"Total generation time: {total_time:.3f}s")
+        # self.log_profile("=== Generation Complete ===\n")
         
         return (output_tensor,)
 
