@@ -8,6 +8,10 @@ from .streamdiffusionwrapper import StreamDiffusionWrapper
 import inspect
 from PIL import Image
 import time
+from .test_utiles import create_profile_visualizations, timer
+import cProfile
+import pstats
+from datetime import datetime
 
 
 ENGINE_DIR = os.path.join(folder_paths.models_dir, "StreamDiffusion--engines")
@@ -264,10 +268,96 @@ class StreamDiffusionDeviceConfig:
         },)
 
 class StreamDiffusionAccelerationSampler:
-    # Add class-level storage
+    # Class-level storage
     _current_model = None
     _current_config = None
+    _iteration_times = []
+    _profiler = None
+    _start_time = None
+    _call_count = 0
+    _max_iterations = 500
+    _is_profiling = False
+    _log_file = None
     
+    def __init__(self):
+        # Create profile output directory
+        self.profile_dir = "/home/ryan/comfyRealtime/ComfyUI_rv/custom_nodes/ComfyUI-StreamDiffusion_tweak/profile_results"
+        os.makedirs(self.profile_dir, exist_ok=True)
+        
+        # Setup log file
+        if not self.__class__._log_file:
+            log_path = os.path.join(self.profile_dir, "profiler_log.txt")
+            self.__class__._log_file = open(log_path, 'a')
+            self._log(f"\n\n--- New Profiling Session Started at {datetime.now()} ---\n")
+        
+        # Only initialize profiling if not already active
+        if not self.__class__._is_profiling:
+            self._log("Initializing profiler for 50 iterations...")
+            self.__class__._profiler = cProfile.Profile()
+            self.__class__._start_time = time.perf_counter()
+            self.__class__._iteration_times = []
+            self.__class__._call_count = 0
+            self.__class__._is_profiling = True
+            self.__class__._profiler.enable()
+
+    def _log(self, message):
+        """Write message to log file with timestamp"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        self.__class__._log_file.write(f"[{timestamp}] {message}\n")
+        self.__class__._log_file.flush()  # Force write to disk
+
+    def _dump_stats(self):
+        """Dump final stats and raise completion exception"""
+        try:
+            self._log(f"Dumping stats after {self._max_iterations} iterations...")
+            current_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            profile_path = os.path.join(self.profile_dir, f"profile_stats_{current_timestamp}")
+            
+            # Disable profiler
+            self.__class__._profiler.disable()
+            
+            # Ensure we have data to process
+            if not self.__class__._iteration_times:
+                raise ValueError("No iteration times recorded")
+                
+            # Calculate statistics
+            avg_time = sum(self.__class__._iteration_times) / len(self.__class__._iteration_times)
+            max_time = max(self.__class__._iteration_times)
+            min_time = min(self.__class__._iteration_times)
+            fps = 1.0 / avg_time
+            total_time = time.perf_counter() - self.__class__._start_time
+            
+            # Save stats to file
+            with open(f"{profile_path}_stats.txt", 'w') as f:
+                f.write(f"Final Statistics for {self._max_iterations} iterations:\n")
+                f.write(f"Total execution time: {total_time:.2f} seconds\n")
+                f.write(f"Average iteration time: {avg_time:.4f} seconds\n")
+                f.write(f"Maximum iteration time: {max_time:.4f} seconds\n")
+                f.write(f"Minimum iteration time: {min_time:.4f} seconds\n")
+                f.write(f"Average FPS: {fps:.2f}\n")
+            
+            # Save profiling data
+            stats = pstats.Stats(self.__class__._profiler)
+            stats.sort_stats('cumulative')
+            stats.dump_stats(f"{profile_path}.prof")
+            
+            # Create visualizations
+            create_profile_visualizations(self.__class__._iteration_times, self.profile_dir)
+            
+            # Reset class-level storage
+            self.__class__._iteration_times = []
+            self.__class__._profiler = None
+            self.__class__._start_time = None
+            self.__class__._call_count = 0
+            self.__class__._is_profiling = False
+            
+            self._log(f"Profile results saved to: {profile_path}")
+            return True
+            
+        except Exception as e:
+            self._log(f"Error during stats dump: {str(e)}")
+            return False
+
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -290,17 +380,6 @@ class StreamDiffusionAccelerationSampler:
     CATEGORY = "StreamDiffusion"
     DESCRIPTION = "Generates images using the configured StreamDiffusion model and specified prompts and settings."
 
-    def __init__(self):
-        self.profile_file = "/home/ryan/comfyRealtime/ComfyUI/custom_nodes/ComfyUI-StreamDiffusion_tweak/profiling.txt"
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(self.profile_file), exist_ok=True)
-
-    def log_profile(self, message):
-        pass
-        # with open(self.profile_file, 'a') as f:
-        #     timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-        #     f.write(f"[{timestamp}] {message}\n")
-    
     def get_model_config(self, stream_model, prompt, negative_prompt, num_inference_steps, 
                         guidance_scale, delta):
         """Create a configuration dictionary for comparing model states"""
@@ -321,104 +400,80 @@ class StreamDiffusionAccelerationSampler:
     def generate(self, stream_model, prompt, negative_prompt, num_inference_steps, 
                 guidance_scale, delta, image=None):
         
-        start_time = time.perf_counter()
-        self.log_profile(f"\n=== New Generation ===")
-        
+        # Only track iterations if we're profiling
+        if self.__class__._is_profiling:
+            self.__class__._call_count += 1
+            iter_start = time.perf_counter()
+            
+            self._log(f"Processing iteration {self.__class__._call_count}/{self._max_iterations}")
+            
+            # Check if we need to dump stats
+            if self.__class__._call_count >= self._max_iterations:
+                if self._dump_stats():
+                    self._log("Profiling complete!")
+                    raise Exception(f"Profiling complete! {self._max_iterations} iterations processed.")
+
         # Create current configuration
         current_config = self.get_model_config(stream_model, prompt, negative_prompt, 
                                              num_inference_steps, guidance_scale, delta)
         
         # Check if we need to update the model
         new_model = self.__class__._current_model is None or self.__class__._current_config != current_config
-        if (new_model):
-            self.log_profile("Model configuration changed or first run - initializing model")
-            self.__class__._current_model = stream_model
-            self.__class__._current_config = current_config
-            
-            # Time the preparation step
-            prep_start = time.perf_counter()
-            stream_model.prepare(
-                prompt=prompt,
-                negative_prompt=negative_prompt,
-                num_inference_steps=num_inference_steps,
-                guidance_scale=guidance_scale,
-                delta=delta
-            )
-            prep_time = time.perf_counter() - prep_start
-            self.log_profile(f"Model preparation took {prep_time:.3f}s")
-
+        if new_model:
+            with timer("Model configuration and preparation"):
+                self.__class__._current_model = stream_model
+                self.__class__._current_config = current_config
+                
+                stream_model.prepare(
+                    prompt=prompt,
+                    negative_prompt=negative_prompt,
+                    num_inference_steps=num_inference_steps,
+                    guidance_scale=guidance_scale,
+                    delta=delta
+                )
         else:
-            self.log_profile("Using existing model configuration")
             stream_model = self.__class__._current_model
 
         if stream_model.mode == "img2img" and image is not None:
             # Handle batch of images
             batch_size = image.shape[0]
             outputs = []
-            self.log_profile(f"Processing batch of {batch_size} images in img2img mode")
             
             for i in range(batch_size):
-                batch_start = time.perf_counter()
-                self.log_profile(f"Processing batch image {i+1}/{batch_size}")
-                
-                # Preprocess timing
-                preprocess_start = time.perf_counter()
-                image_tensor = stream_model.preprocess_image(
-                    Image.fromarray((image[i].numpy() * 255).astype(np.uint8))
-                )
-                preprocess_time = time.perf_counter() - preprocess_start
-                self.log_profile(f"Image preprocessing took {preprocess_time:.3f}s")
+                with timer(f"Processing batch image {i+1}/{batch_size}"):
+                    # Preprocess image
+                    with timer("Image preprocessing"):
+                        image_tensor = stream_model.preprocess_image(
+                            Image.fromarray((image[i].numpy() * 255).astype(np.uint8))
+                        )
 
-                # Warmup timing
-                if new_model:
-                    warmup_start = time.perf_counter()
-                    for _ in range(stream_model.batch_size - 1):
-                        stream_model(image=image_tensor)
-                    warmup_time = time.perf_counter() - warmup_start
-                    self.log_profile(f"Warmup iterations ({stream_model.batch_size-1} steps) took {warmup_time:.3f}s")
+                    # Warmup if new model
+                    if new_model:
+                        with timer("Warmup iterations"):
+                            for _ in range(stream_model.batch_size - 1):
+                                stream_model(image=image_tensor)
 
-                # Generation timing
-                generation_start = time.perf_counter()
-                output = stream_model(image=image_tensor)
-                generation_time = time.perf_counter() - generation_start
-                self.log_profile(f"Image generation took {generation_time:.3f}s")
-                
-                outputs.append(output)
-                batch_total = time.perf_counter() - batch_start
-                self.log_profile(f"Batch {i+1} completed in {batch_total:.3f}s")
+                    # Generation
+                    output = stream_model(image=image_tensor)
+                    outputs.append(output)
             
-            # Stack outputs
-            stack_start = time.perf_counter()
             output_array = np.stack([np.array(img) for img in outputs], axis=0)
-            stack_time = time.perf_counter() - stack_start
-            self.log_profile(f"Output stacking took {stack_time:.3f}s")
             
         else:
             # Text to image generation
-            self.log_profile("Performing txt2img generation")
-            generation_start = time.perf_counter()
             output = stream_model.txt2img()
-            generation_time = time.perf_counter() - generation_start
-            self.log_profile(f"Txt2img generation took {generation_time:.3f}s")
-            
             output_array = np.array(output)
-            if len(output_array.shape) == 3:  # Single image
+            if len(output_array.shape) == 3:
                 output_array = np.expand_dims(output_array, 0)
         
         # Convert to tensor and normalize
-        tensor_start = time.perf_counter()
         output_tensor = torch.from_numpy(output_array).float() / 255.0
+        if len(output_tensor.shape) == 3:
+            output_tensor = output_tensor.unsqueeze(0)
         
-        # Ensure BHWC format
-        if len(output_tensor.shape) == 3:  # If HWC
-            output_tensor = output_tensor.unsqueeze(0)  # Add batch dimension -> BHWC
-            
-        tensor_time = time.perf_counter() - tensor_start
-        self.log_profile(f"Tensor conversion took {tensor_time:.3f}s")
-        
-        total_time = time.perf_counter() - start_time
-        self.log_profile(f"Total generation time: {total_time:.3f}s")
-        self.log_profile("=== Generation Complete ===\n")
+        # Record iteration time
+        iter_time = time.perf_counter() - iter_start
+        self.__class__._iteration_times.append(iter_time)
         
         return (output_tensor,)
 
@@ -600,7 +655,7 @@ NODE_CLASS_MAPPINGS = {
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "StreamDiffusionConfig": "StreamDiffusionConfig",
-    "StreamDiffusionAccelerationSampler": "StreamDiffusionAccelerationSampler",
+    "StreamDiffusionAccelerationSampler": "StreamDiffusionAccelerationSamplerrrrr",
     "StreamDiffusionLoraLoader": "StreamDiffusionLoraLoader",
     "StreamDiffusionAccelerationConfig": "StreamDiffusionAccelerationConfig",
     "StreamDiffusionSimilarityFilterConfig": "StreamDiffusionSimilarityFilterConfig", 
