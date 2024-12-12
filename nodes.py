@@ -11,6 +11,7 @@ import time
 
 
 ENGINE_DIR = os.path.join(folder_paths.models_dir, "StreamDiffusion--engines")
+LIVE_PEER_CHECKPOINT_DIR = os.path.join(folder_paths.models_dir,"models/ComfyUI--models/checkpoints")
 
 def get_wrapper_defaults(param_names):
     """Helper function to get default values from StreamDiffusionWrapper parameters
@@ -65,6 +66,19 @@ def get_engine_configs():
     
     return configs
 
+def get_live_peer_checkpoints():
+    """Get list of .safetensors files from LivePeer checkpoint directory"""
+
+    if not os.path.exists(LIVE_PEER_CHECKPOINT_DIR):
+        return []
+    
+    checkpoints = []
+    for file in os.listdir(LIVE_PEER_CHECKPOINT_DIR):
+        if file.endswith(".safetensors"):
+            checkpoints.append(file)
+            
+    return checkpoints
+
 class StreamDiffusionTensorRTEngineLoader:
     @classmethod
     def INPUT_TYPES(s):
@@ -80,6 +94,25 @@ class StreamDiffusionTensorRTEngineLoader:
 
     def load_engine(self, engine_name):
         return (os.path.join(ENGINE_DIR, engine_name),)
+
+LIVE_PEER_CHECKPOINT_DIR = os.path.join(folder_paths.models_dir,"models/ComfyUI--models/checkpoints")
+
+class StreamDiffusionLPCheckpointLoader:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "model_name": (get_live_peer_checkpoints(), ),
+            }
+        }
+    
+    RETURN_TYPES = ("SDMODEL",)
+    FUNCTION = "load_model"
+    CATEGORY = "StreamDiffusion"
+
+    def load_model(self, model_name):
+        mod = os.path.join(LIVE_PEER_CHECKPOINT_DIR, model_name)
+        return (mod,)
 
 class StreamDiffusionLoraLoader:
     @classmethod
@@ -263,9 +296,10 @@ class StreamDiffusionAccelerationSampler:
         os.makedirs(os.path.dirname(self.profile_file), exist_ok=True)
 
     def log_profile(self, message):
-        with open(self.profile_file, 'a') as f:
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"[{timestamp}] {message}\n")
+        pass
+        # with open(self.profile_file, 'a') as f:
+        #     timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+        #     f.write(f"[{timestamp}] {message}\n")
     
     def get_model_config(self, stream_model, prompt, negative_prompt, num_inference_steps, 
                         guidance_scale, delta):
@@ -439,7 +473,7 @@ class StreamDiffusionConfig(StreamDiffusionConfigMixin):
             "required": {
                 "model": ("SDMODEL", {"tooltip": "The StreamDiffusion model to use for generation."}),
                 "t_index_list": ("STRING", {"default": "39,35,30", "tooltip": "Comma-separated list of t_index values determining at which steps to output images."}),
-                "mode": (["img2img", "txt2img"], {"default": defaults["mode"], "tooltip": "Generation mode: image-to-image or text-to-image. NoteL txt2img requires cfg_type of 'none'"}),
+                "mode": (["img2img", "txt2img"], {"default": defaults["mode"], "tooltip": "Generation mode: image-to-image or text-to-image. Note: txt2img requires cfg_type of 'none'"}),
                 "width": ("INT", {"default": defaults["width"], "min": 64, "max": 2048, "tooltip": "The width of the generated images."}),
                 "height": ("INT", {"default": defaults["height"], "min": 64, "max": 2048, "tooltip": "The height of the generated images."}),
                 "acceleration": (["none", "xformers", "tensorrt"], {"default": defaults["acceleration"], "tooltip": "Acceleration method to optimize performance."}),
@@ -460,7 +494,10 @@ class StreamDiffusionConfig(StreamDiffusionConfigMixin):
     OUTPUT_TOOLTIPS = ("The configured StreamDiffusion model.",)
     FUNCTION = "load_model"
     CATEGORY = "StreamDiffusion"
-    DESCRIPTION = "Configures and initializes the StreamDiffusion model with specified settings for generation."
+    DESCRIPTION = """
+With TensorRT acceleration enabled, this node will run a TensorRT engine with the supplied parameters. 
+If a suitable engine does not exist, it will be created. This can be used with any given checkpoint from either StreamDiffusionCheckpointLoader or StreamDiffusionLPCheckpointLoader or StreamDiffusionLPModelLoader.
+    """
 
     def load_model(self, model, t_index_list, mode, width, height, acceleration, 
                   frame_buffer_size, use_tiny_vae, cfg_type, use_lcm_lora, seed,
@@ -558,6 +595,7 @@ NODE_CLASS_MAPPINGS = {
     "StreamDiffusionCheckpointLoader": StreamDiffusionCheckpointLoader,
     "StreamDiffusionPrebuiltConfig": StreamDiffusionPrebuiltConfig,
     "StreamDiffusionTensorRTEngineLoader": StreamDiffusionTensorRTEngineLoader,
+    "StreamDiffusionLPModelLoader": StreamDiffusionLPCheckpointLoader,   
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -569,4 +607,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "StreamDiffusionDeviceConfig": "StreamDiffusionDeviceConfig",
     "StreamDiffusionCheckpointLoader": "StreamDiffusionCheckpointLoader",
     "StreamDiffusionPrebuiltConfig": "StreamDiffusionPrebuiltConfig",
+    "StreamDiffusionLPModelLoader": "StreamDiffusionLPModelLoader",
 }

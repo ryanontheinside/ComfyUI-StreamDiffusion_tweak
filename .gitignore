@@ -1,3 +1,5 @@
 __pycache__/
 *.py[cod]
 engines/
+dl_checkpoints.sh
+profiling.txt
