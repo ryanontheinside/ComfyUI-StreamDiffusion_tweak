@@ -7,7 +7,7 @@
       "guidance_scale": 1.2,
       "delta": 1,
       "stream_model": [
-        "170",
+        "177",
         0
       ],
       "image": [
@@ -33,13 +33,13 @@
     },
     "class_type": "LoadImage"
   },
-  "168": {
+  "172": {
     "inputs": {
-      "checkpoint": "kohaku-v2.1.safetensors"
+      "model_name": "kohaku-v2.1.safetensors"
     },
-    "class_type": "StreamDiffusionCheckpointLoader"
+    "class_type": "StreamDiffusionLPModelLoader"
   },
-  "170": {
+  "177": {
     "inputs": {
       "t_index_list": "39,35,30",
       "mode": "img2img",
@@ -52,10 +52,16 @@
       "use_lcm_lora": true,
       "seed": 2,
       "model": [
-        "168",
+        "172",
         0
       ]
     },
-    "class_type": "StreamDiffusionConfig"
+    "class_type": "StreamDiffusionEngine"
+  },
+  "178": {
+    "inputs": {
+      "checkpoint": "3dCartoonVision_v10.safetensors"
+    },
+    "class_type": "StreamDiffusionCheckpointLoader"
   }
 }

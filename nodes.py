@@ -1,36 +1,29 @@
 import torch
-import logging
-import os, sys
-from pathlib import Path
+import os
 import folder_paths
-import numpy as np
 from .streamdiffusionwrapper import StreamDiffusionWrapper
 import inspect
-from PIL import Image
-import time
-
 
 ENGINE_DIR = os.path.join(folder_paths.models_dir, "StreamDiffusion--engines")
 LIVE_PEER_CHECKPOINT_DIR = os.path.join(folder_paths.models_dir,"models/ComfyUI--models/checkpoints")
 
-def get_wrapper_defaults(param_names):
-    """Helper function to get default values from StreamDiffusionWrapper parameters
-    Args:
-        param_names (list): List of parameter names to extract
-    Returns:
-        dict: Dictionary of parameter names and their default values
-    """
-    wrapper_params = inspect.signature(StreamDiffusionWrapper).parameters
-    defaults = {}
-    for name in param_names:
-        if name not in wrapper_params:
-            continue
-        #override engine_dir to be the models/StreamDiffusion--engines directory as opposed to the wrapper's default
-        if name == 'engine_dir': 
-            defaults[name] = os.path.join(folder_paths.models_dir, 'StreamDiffusion--engines')
-        else:
-            defaults[name] = wrapper_params[name].default
-    return defaults
+_wrapper_params = None
+def _get_wrapper_params():
+    """Private function to get and cache StreamDiffusionWrapper parameters so consequential defaults for nodes are centrally managed"""
+    global _wrapper_params
+    if _wrapper_params is None:
+        print("Getting wrapper params")
+        params = inspect.signature(StreamDiffusionWrapper).parameters
+        
+        # Store parameters with overridden defaults
+        _wrapper_params = {
+            name: param.default for name, param in params.items()
+        }
+        # Override specific defaults
+        _wrapper_params['engine_dir'] = os.path.join(folder_paths.models_dir, 'StreamDiffusion--engines')
+        _wrapper_params['output_type'] = 'pt'
+        
+    return _wrapper_params
 
 def get_engine_configs():
     """Scan StreamDiffusion--engines directory for available engine configurations"""
@@ -79,6 +72,7 @@ def get_live_peer_checkpoints():
             
     return checkpoints
 
+#TODO: remove?
 class StreamDiffusionTensorRTEngineLoader:
     @classmethod
     def INPUT_TYPES(s):
@@ -95,8 +89,6 @@ class StreamDiffusionTensorRTEngineLoader:
     def load_engine(self, engine_name):
         return (os.path.join(ENGINE_DIR, engine_name),)
 
-LIVE_PEER_CHECKPOINT_DIR = os.path.join(folder_paths.models_dir,"models/ComfyUI--models/checkpoints")
-
 class StreamDiffusionLPCheckpointLoader:
     @classmethod
     def INPUT_TYPES(s):
@@ -109,6 +101,7 @@ class StreamDiffusionLPCheckpointLoader:
     RETURN_TYPES = ("SDMODEL",)
     FUNCTION = "load_model"
     CATEGORY = "StreamDiffusion"
+    DESCRIPTION = "Loads a model from LivePeer checkpoint directory. Interchangeable with StreamDiffusionCheckpointLoader."
 
     def load_model(self, model_name):
         mod = os.path.join(LIVE_PEER_CHECKPOINT_DIR, model_name)
@@ -120,7 +113,7 @@ class StreamDiffusionLoraLoader:
         return {
             "required": {
                 "lora_name": (folder_paths.get_filename_list("loras"), {"tooltip": "The name of the LoRA model to load."}),
-                "strength": ("FLOAT", {"default": 0.5, "min": -100.0, "max": 100.0, "step": 0.01, "tooltip": "The strength scale for the LoRA model. Higher values result in greater influence of the LoRA on the output."}),
+                "strength": ("FLOAT", {"default": 0.5, "min": -10.0, "max": 10.0, "step": 0.01, "tooltip": "The strength scale for the LoRA model. Higher values result in greater influence of the LoRA on the output."}),
             },
             "optional": {
                 "previous_loras": ("LORA_DICT", {"tooltip": "Optional dictionary of previously loaded LoRAs to which the new LoRA will be added. Use this to combine multiple LoRAs."}),
@@ -172,96 +165,83 @@ class StreamDiffusionCheckpointLoader:
     RETURN_TYPES = ("SDMODEL",)
     FUNCTION = "load_checkpoint"
     CATEGORY = "StreamDiffusion"
-
+    DESCRIPTION = "Loads a model from the ComfyUI checkpoint directory. Interchangeable with StreamDiffusionLPCheckpointLoader."
     def load_checkpoint(self, checkpoint):
         checkpoint_path = folder_paths.get_full_path("checkpoints", checkpoint)
         return (checkpoint_path,)
 
-class StreamDiffusionAccelerationConfig:
+class StreamDiffusionAdvancedConfig:
     @classmethod
     def INPUT_TYPES(s):
-        defaults = get_wrapper_defaults(["warmup", "do_add_noise", "use_denoising_batch"])
+        defaults = _get_wrapper_params()
+        
         return {
             "required": {
-                "warmup": ("INT", {"default": defaults["warmup"], "min": 0, "max": 100, "tooltip": "The number of warmup steps to perform before actual inference. Increasing this may improve stability at the cost of speed."}),
-                "do_add_noise": ("BOOLEAN", {"default": defaults["do_add_noise"], "tooltip": "Whether to add noise during denoising steps. Enable this to allow the model to generate diverse outputs."}),
-                "use_denoising_batch": ("BOOLEAN", {"default": defaults["use_denoising_batch"], "tooltip": "Whether to use batch denoising for performance optimization."}),
+                # Acceleration settings
+                "warmup": ("INT", {"default": defaults["warmup"], "min": 0, "max": 100, 
+                    "tooltip": "The number of warmup steps to perform before actual inference. Increasing this may improve stability at the cost of speed."}),
+                "do_add_noise": ("BOOLEAN", {"default": defaults["do_add_noise"], 
+                    "tooltip": "Whether to add noise during denoising steps. Enable this to allow the model to generate diverse outputs."}),
+                "use_denoising_batch": ("BOOLEAN", {"default": defaults["use_denoising_batch"], 
+                    "tooltip": "Whether to use batch denoising for performance optimization."}),
+                
+                # Similarity filter settings
+                "enable_similar_image_filter": ("BOOLEAN", {"default": defaults["enable_similar_image_filter"], 
+                    "tooltip": "Enable filtering out images that are too similar to previous outputs."}),
+                "similar_image_filter_threshold": ("FLOAT", {"default": defaults["similar_image_filter_threshold"], "min": 0.0, "max": 1.0, 
+                    "tooltip": "Threshold determining how similar an image must be to previous outputs to be filtered out (0.0 to 1.0)."}),
+                "similar_image_filter_max_skip_frame": ("INT", {"default": defaults["similar_image_filter_max_skip_frame"], "min": 0, "max": 100, 
+                    "tooltip": "Maximum number of frames to skip when filtering similar images."}),
+                
+                # Device settings
+                "device": (["cuda", "cpu"], {"default": defaults["device"], 
+                    "tooltip": "Device to run inference on. CPU will be significantly slower."}),
+                "dtype": (["float16", "float32"], {"default": "float16" if defaults["dtype"] == torch.float16 else "float32", 
+                    "tooltip": "Data type for inference. float16 uses less memory but may be less precise."}),
+                "device_ids": ("STRING", {"default": str(defaults["device_ids"] or ""), 
+                    "tooltip": "Comma-separated list of device IDs for multi-GPU support. Leave empty for single GPU."}),
+                "use_safety_checker": ("BOOLEAN", {"default": defaults["use_safety_checker"], 
+                    "tooltip": "Enable safety checker to filter NSFW content. May impact performance."}),
+                "engine_dir": ("STRING", {"default": defaults["engine_dir"], 
+                    "tooltip": "Directory for TensorRT engine files when using tensorrt acceleration."}),
             }
         }
 
-    RETURN_TYPES = ("ACCELERATION_CONFIG",)
-    OUTPUT_TOOLTIPS = ("Configuration settings for acceleration.",)
-    FUNCTION = "get_acceleration_config"
+    RETURN_TYPES = ("ADVANCED_CONFIG",)
+    OUTPUT_TOOLTIPS = ("Combined configuration settings for acceleration, similarity filtering, and device parameters.",)
+    FUNCTION = "get_config"
     CATEGORY = "StreamDiffusion"
-    DESCRIPTION = "Configures acceleration settings for the StreamDiffusion model to optimize performance."
+    DESCRIPTION = "Configures advanced settings for StreamDiffusion including acceleration, similarity filtering, and device settings."
 
-    def get_acceleration_config(self, warmup, do_add_noise, use_denoising_batch):
-        return ({
-            "warmup": warmup,
-            "do_add_noise": do_add_noise,
-            "use_denoising_batch": use_denoising_batch
-        },)
-
-class StreamDiffusionSimilarityFilterConfig:
-    @classmethod
-    def INPUT_TYPES(s):
-        defaults = get_wrapper_defaults([
-            "enable_similar_image_filter",
-            "similar_image_filter_threshold",
-            "similar_image_filter_max_skip_frame"
-        ])
-        return {
-            "required": {
-                "enable_similar_image_filter": ("BOOLEAN", {"default": defaults["enable_similar_image_filter"], "tooltip": "Enable filtering out images that are too similar to previous outputs."}),
-                "similar_image_filter_threshold": ("FLOAT", {"default": defaults["similar_image_filter_threshold"], "min": 0.0, "max": 1.0, "tooltip": "Threshold determining how similar an image must be to previous outputs to be filtered out (0.0 to 1.0)."}),
-                "similar_image_filter_max_skip_frame": ("INT", {"default": defaults["similar_image_filter_max_skip_frame"], "min": 0, "max": 100, "tooltip": "Maximum number of frames to skip when filtering similar images."}),
-            }
-        }
-
-    RETURN_TYPES = ("SIMILARITY_FILTER_CONFIG",)
-    OUTPUT_TOOLTIPS = ("Configuration settings for similarity filtering.",)
-    FUNCTION = "get_similarity_filter_config"
-    CATEGORY = "StreamDiffusion"
-    DESCRIPTION = "Configures similarity filtering to prevent generating images that are too similar to previous outputs."
-
-    def get_similarity_filter_config(self, enable_similar_image_filter, similar_image_filter_threshold, similar_image_filter_max_skip_frame):
-        return ({
-            "enable_similar_image_filter": enable_similar_image_filter,
-            "similar_image_filter_threshold": similar_image_filter_threshold,
-            "similar_image_filter_max_skip_frame": similar_image_filter_max_skip_frame
-        },)
-
-class StreamDiffusionDeviceConfig:
-    @classmethod
-    def INPUT_TYPES(s):
-        defaults = get_wrapper_defaults(["device", "device_ids", "dtype", "use_safety_checker", "engine_dir"])
-        return {
-            "required": {
-                "device": (["cuda", "cpu"], {"default": defaults["device"], "tooltip": "Device to run inference on. CPU will be significantly slower."}),
-                "dtype": (["float16", "float32"], {"default": "float16" if defaults["dtype"] == torch.float16 else "float32", "tooltip": "Data type for inference. float16 uses less memory but may be less precise."}),
-                "device_ids": ("STRING", {"default": str(defaults["device_ids"] or ""), "tooltip": "Comma-separated list of device IDs for multi-GPU support. Leave empty for single GPU."}),
-                "use_safety_checker": ("BOOLEAN", {"default": defaults["use_safety_checker"], "tooltip": "Enable safety checker to filter NSFW content. May impact performance."}),
-                "engine_dir": ("STRING", {"default": defaults["engine_dir"], "tooltip": "Directory for TensorRT engine files when using tensorrt acceleration."}),
-            }
-        }
-
-    RETURN_TYPES = ("DEVICE_CONFIG",)
-    OUTPUT_TOOLTIPS = ("Configuration settings for device and engine parameters.",)
-    FUNCTION = "get_device_config"
-    CATEGORY = "StreamDiffusion"
-    DESCRIPTION = "Configures device, engine, and safety checker settings for the StreamDiffusion model."
-
-    def get_device_config(self, device, dtype, device_ids, use_safety_checker, engine_dir):
+    def get_config(self, warmup, do_add_noise, use_denoising_batch,
+                  enable_similar_image_filter, similar_image_filter_threshold, 
+                  similar_image_filter_max_skip_frame,
+                  device, dtype, device_ids, use_safety_checker, engine_dir):
+        
         # Convert device_ids string to list if provided
         device_ids = [int(x.strip()) for x in device_ids.split(",")] if device_ids.strip() else None
         
-        return ({
+        # Combine all settings into a single config dictionary
+        advanced_config = {
+            # Acceleration settings
+            "warmup": warmup,
+            "do_add_noise": do_add_noise,
+            "use_denoising_batch": use_denoising_batch,
+            
+            # Similarity filter settings
+            "enable_similar_image_filter": enable_similar_image_filter,
+            "similar_image_filter_threshold": similar_image_filter_threshold,
+            "similar_image_filter_max_skip_frame": similar_image_filter_max_skip_frame,
+            
+            # Device settings
             "device": device,
             "dtype": torch.float32 if dtype == "float32" else torch.float16,
             "device_ids": device_ids,
             "use_safety_checker": use_safety_checker,
             "engine_dir": engine_dir,
-        },)
+        }
+        
+        return (advanced_config,)
 
 class StreamDiffusionAccelerationSampler:
     # Add class-level storage
@@ -295,12 +275,6 @@ class StreamDiffusionAccelerationSampler:
         # Ensure directory exists
         os.makedirs(os.path.dirname(self.profile_file), exist_ok=True)
 
-    def log_profile(self, message):
-        pass
-        # with open(self.profile_file, 'a') as f:
-        #     timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-        #     f.write(f"[{timestamp}] {message}\n")
-    
     def get_model_config(self, stream_model, prompt, negative_prompt, num_inference_steps, 
                         guidance_scale, delta):
         """Create a configuration dictionary for comparing model states"""
@@ -321,22 +295,14 @@ class StreamDiffusionAccelerationSampler:
     def generate(self, stream_model, prompt, negative_prompt, num_inference_steps, 
                 guidance_scale, delta, image=None):
         
-        start_time = time.perf_counter()
-        self.log_profile(f"\n=== New Generation ===")
-        
-        # Create current configuration
         current_config = self.get_model_config(stream_model, prompt, negative_prompt, 
                                              num_inference_steps, guidance_scale, delta)
-        
-        # Check if we need to update the model
         new_model = self.__class__._current_model is None or self.__class__._current_config != current_config
         if (new_model):
-            self.log_profile("Model configuration changed or first run - initializing model")
             self.__class__._current_model = stream_model
             self.__class__._current_config = current_config
             
             # Time the preparation step
-            prep_start = time.perf_counter()
             stream_model.prepare(
                 prompt=prompt,
                 negative_prompt=negative_prompt,
@@ -344,82 +310,51 @@ class StreamDiffusionAccelerationSampler:
                 guidance_scale=guidance_scale,
                 delta=delta
             )
-            prep_time = time.perf_counter() - prep_start
-            self.log_profile(f"Model preparation took {prep_time:.3f}s")
 
         else:
-            self.log_profile("Using existing model configuration")
             stream_model = self.__class__._current_model
 
         if stream_model.mode == "img2img" and image is not None:
             # Handle batch of images
             batch_size = image.shape[0]
             outputs = []
-            self.log_profile(f"Processing batch of {batch_size} images in img2img mode")
             
             for i in range(batch_size):
-                batch_start = time.perf_counter()
-                self.log_profile(f"Processing batch image {i+1}/{batch_size}")
-                
-                # Preprocess timing
-                preprocess_start = time.perf_counter()
-                image_tensor = stream_model.preprocess_image(
-                    Image.fromarray((image[i].numpy() * 255).astype(np.uint8))
-                )
-                preprocess_time = time.perf_counter() - preprocess_start
-                self.log_profile(f"Image preprocessing took {preprocess_time:.3f}s")
+                # Convert from BHWC to BCHW format for model input
+                image_tensor = image[i].permute(2, 0, 1).unsqueeze(0)
 
                 # Warmup timing
                 if new_model:
-                    warmup_start = time.perf_counter()
                     for _ in range(stream_model.batch_size - 1):
                         stream_model(image=image_tensor)
-                    warmup_time = time.perf_counter() - warmup_start
-                    self.log_profile(f"Warmup iterations ({stream_model.batch_size-1} steps) took {warmup_time:.3f}s")
+                    new_model = False
 
                 # Generation timing
-                generation_start = time.perf_counter()
                 output = stream_model(image=image_tensor)
-                generation_time = time.perf_counter() - generation_start
-                self.log_profile(f"Image generation took {generation_time:.3f}s")
+                
+                # Handle permutation based on tensor dimensions
+                if len(output.shape) == 4:  # BCHW
+                    output = output.permute(0, 2, 3, 1)
+                elif len(output.shape) == 3:  # CHW
+                    output = output.permute(1, 2, 0)
+                    output = output.unsqueeze(0)  # Add batch dimension -> BHWC
                 
                 outputs.append(output)
-                batch_total = time.perf_counter() - batch_start
-                self.log_profile(f"Batch {i+1} completed in {batch_total:.3f}s")
             
             # Stack outputs
-            stack_start = time.perf_counter()
-            output_array = np.stack([np.array(img) for img in outputs], axis=0)
-            stack_time = time.perf_counter() - stack_start
-            self.log_profile(f"Output stacking took {stack_time:.3f}s")
+            output_tensor = torch.cat(outputs, dim=0)
             
         else:
             # Text to image generation
-            self.log_profile("Performing txt2img generation")
-            generation_start = time.perf_counter()
             output = stream_model.txt2img()
-            generation_time = time.perf_counter() - generation_start
-            self.log_profile(f"Txt2img generation took {generation_time:.3f}s")
             
-            output_array = np.array(output)
-            if len(output_array.shape) == 3:  # Single image
-                output_array = np.expand_dims(output_array, 0)
-        
-        # Convert to tensor and normalize
-        tensor_start = time.perf_counter()
-        output_tensor = torch.from_numpy(output_array).float() / 255.0
-        
-        # Ensure BHWC format
-        if len(output_tensor.shape) == 3:  # If HWC
-            output_tensor = output_tensor.unsqueeze(0)  # Add batch dimension -> BHWC
+            # Handle permutation based on tensor dimensions
+            if len(output.shape) == 4:  # BCHW
+                output_tensor = output.permute(0, 2, 3, 1)
+            elif len(output.shape) == 3:  # CHW
+                output_tensor = output.permute(1, 2, 0)
+                output_tensor = output_tensor.unsqueeze(0)  # Add batch dimension -> BHWC
             
-        tensor_time = time.perf_counter() - tensor_start
-        self.log_profile(f"Tensor conversion took {tensor_time:.3f}s")
-        
-        total_time = time.perf_counter() - start_time
-        self.log_profile(f"Total generation time: {total_time:.3f}s")
-        self.log_profile("=== Generation Complete ===\n")
-        
         return (output_tensor,)
 
 class StreamDiffusionConfigMixin:
@@ -427,48 +362,23 @@ class StreamDiffusionConfigMixin:
     def get_optional_inputs():
         return {
             "opt_lora_dict": ("LORA_DICT", {"tooltip": "Optional dictionary of LoRA models to apply."}),
-            "opt_acceleration_config": ("ACCELERATION_CONFIG", {"tooltip": "Optional acceleration configuration to fine-tune performance settings."}),
-            "opt_similarity_filter_config": ("SIMILARITY_FILTER_CONFIG", {"tooltip": "Optional similarity filter configuration to filter out similar images."}),
-            "opt_device_config": ("DEVICE_CONFIG", {"tooltip": "Optional device and engine configuration settings."}),
-            # "opt_lcm_lora_path": ("LCM_LORA_PATH",),
-            # "opt_vae_path": ("VAE_PATH",),
+            "opt_advanced_config": ("ADVANCED_CONFIG", {"tooltip": "Optional advanced configuration for performance, filtering, and device settings."}),
         }
 
     @staticmethod
-    def apply_optional_configs(config, opt_lora_dict=None, opt_acceleration_config=None,
-                             opt_similarity_filter_config=None, opt_device_config=None):
+    def apply_optional_configs(config, opt_lora_dict=None, opt_advanced_config=None):
         if opt_lora_dict:
             config["lora_dict"] = opt_lora_dict
 
-        if opt_acceleration_config:
-            config.update(opt_acceleration_config)
-
-        if opt_similarity_filter_config:
-            config.update(opt_similarity_filter_config)
-
-        if opt_device_config:
-            config.update(opt_device_config)
-
-        # if opt_lcm_lora_path:
-        #     config["lcm_lora_id"] = opt_lcm_lora_path
-
-        # if opt_vae_path is not None:
-        #     config["vae_id"] = opt_vae_path.strip() if opt_vae_path.strip() else None
+        if opt_advanced_config:
+            config.update(opt_advanced_config)
         
         return config
 
-    @staticmethod
-    def get_base_config():
-        return get_wrapper_defaults([
-            "mode", "width", "height", "acceleration", "frame_buffer_size",
-            "use_tiny_vae", "cfg_type", "seed", "engine_dir"
-        ])  
-
-class StreamDiffusionConfig(StreamDiffusionConfigMixin):
+class StreamDiffusionEngine(StreamDiffusionConfigMixin):
     @classmethod
     def INPUT_TYPES(s):
-        defaults = s.get_base_config()
-        
+        defaults = _get_wrapper_params()
         return {
             "required": {
                 "model": ("SDMODEL", {"tooltip": "The StreamDiffusion model to use for generation."}),
@@ -495,7 +405,7 @@ class StreamDiffusionConfig(StreamDiffusionConfigMixin):
     FUNCTION = "load_model"
     CATEGORY = "StreamDiffusion"
     DESCRIPTION = """
-With TensorRT acceleration enabled, this node will run a TensorRT engine with the supplied parameters. 
+This configures a model for StreamDiffusion. The model can be configured with or without acceleration. With TensorRT acceleration enabled, this node will run a TensorRT engine with the supplied parameters. 
 If a suitable engine does not exist, it will be created. This can be used with any given checkpoint from either StreamDiffusionCheckpointLoader or StreamDiffusionLPCheckpointLoader or StreamDiffusionLPModelLoader.
     """
 
@@ -504,6 +414,7 @@ If a suitable engine does not exist, it will be created. This can be used with a
                   **optional_configs):
         
         t_index_list = [int(x.strip()) for x in t_index_list.split(",")]
+        defaults = _get_wrapper_params()
         
         # Build base configuration
         config = {
@@ -518,7 +429,8 @@ If a suitable engine does not exist, it will be created. This can be used with a
             "cfg_type": cfg_type,
             "use_lcm_lora": use_lcm_lora,
             "seed": seed,
-            "engine_dir": self.get_base_config()["engine_dir"]
+            "engine_dir": defaults["engine_dir"],
+            "output_type": defaults["output_type"]
         }
 
         # Apply optional configs using mixin method
@@ -534,10 +446,11 @@ If a suitable engine does not exist, it will be created. This can be used with a
 
         return (wrapper,)
 
-class StreamDiffusionPrebuiltConfig(StreamDiffusionConfigMixin):
+#TODO: confirm this works well with container deployment
+class StreamDiffusionPrebuiltEngine(StreamDiffusionConfigMixin):
     @classmethod
     def INPUT_TYPES(s):
-        defaults = s.get_base_config()
+        defaults = _get_wrapper_params()
         return {
             "required": {
                 "engine_config": (get_engine_configs(), {"tooltip": "Select from available prebuilt engine configurations"}),
@@ -548,15 +461,15 @@ class StreamDiffusionPrebuiltConfig(StreamDiffusionConfigMixin):
                 "height": ("INT", {"default": defaults["height"], "min": 64, "max": 2048, "tooltip": "Must match the height used when building engines"}),
             },
             "optional": {
-                **s.get_optional_inputs(),
                 "model": ("SDMODEL", ),
+                **s.get_optional_inputs(),
             }
         }
 
     RETURN_TYPES = ("STREAM_MODEL",)
     FUNCTION = "configure_model"
     CATEGORY = "StreamDiffusion"
-    DESCRIPTION = "Configures StreamDiffusion to use existing TensorRT engines"
+    DESCRIPTION = "Configures a model for StreamDiffusion using existing TensorRT engines."
 
     def configure_model(self, engine_config, t_index_list, mode, frame_buffer_size, width, height, model=None, **optional_configs):
         # Convert t_index_list from string to list of ints
@@ -565,6 +478,8 @@ class StreamDiffusionPrebuiltConfig(StreamDiffusionConfigMixin):
         # Get the engine directory path
         engine_dir = os.path.join(ENGINE_DIR, engine_config)
         
+        defaults = _get_wrapper_params()
+        
         # Build base configuration
         config = {
             "model_id_or_path": model if model is not None else engine_config,
@@ -572,11 +487,11 @@ class StreamDiffusionPrebuiltConfig(StreamDiffusionConfigMixin):
             "acceleration": "tensorrt",
             "frame_buffer_size": frame_buffer_size,
             "t_index_list": t_index_list,
-            
             "width": width,
             "height": height,
             "use_denoising_batch": True,
-            "use_tiny_vae": True  # Assuming TinyVAE was used in engine building
+            "use_tiny_vae": True,  # Assuming TinyVAE was used in engine building
+            "output_type": defaults["output_type"]
         }
 
         # Apply optional configs using mixin method
@@ -586,26 +501,23 @@ class StreamDiffusionPrebuiltConfig(StreamDiffusionConfigMixin):
         return (wrapper,)
 
 NODE_CLASS_MAPPINGS = {
-    "StreamDiffusionConfig": StreamDiffusionConfig,
+    "StreamDiffusionEngine": StreamDiffusionEngine,
     "StreamDiffusionAccelerationSampler": StreamDiffusionAccelerationSampler,
+    "StreamDiffusionPrebuiltEngine": StreamDiffusionPrebuiltEngine,
     "StreamDiffusionLoraLoader": StreamDiffusionLoraLoader,
-    "StreamDiffusionAccelerationConfig": StreamDiffusionAccelerationConfig,
-    "StreamDiffusionSimilarityFilterConfig": StreamDiffusionSimilarityFilterConfig,
-    "StreamDiffusionDeviceConfig": StreamDiffusionDeviceConfig,
+    "StreamDiffusionAdvancedConfig": StreamDiffusionAdvancedConfig,
     "StreamDiffusionCheckpointLoader": StreamDiffusionCheckpointLoader,
-    "StreamDiffusionPrebuiltConfig": StreamDiffusionPrebuiltConfig,
     "StreamDiffusionTensorRTEngineLoader": StreamDiffusionTensorRTEngineLoader,
     "StreamDiffusionLPModelLoader": StreamDiffusionLPCheckpointLoader,   
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "StreamDiffusionConfig": "StreamDiffusionConfig",
+    "StreamDiffusionEngine": "StreamDiffusionEngine",
     "StreamDiffusionAccelerationSampler": "StreamDiffusionAccelerationSampler",
     "StreamDiffusionLoraLoader": "StreamDiffusionLoraLoader",
-    "StreamDiffusionAccelerationConfig": "StreamDiffusionAccelerationConfig",
-    "StreamDiffusionSimilarityFilterConfig": "StreamDiffusionSimilarityFilterConfig", 
-    "StreamDiffusionDeviceConfig": "StreamDiffusionDeviceConfig",
+    "StreamDiffusionAdvancedConfig": "StreamDiffusionAdvancedConfig",
     "StreamDiffusionCheckpointLoader": "StreamDiffusionCheckpointLoader",
-    "StreamDiffusionPrebuiltConfig": "StreamDiffusionPrebuiltConfig",
-    "StreamDiffusionLPModelLoader": "StreamDiffusionLPModelLoader",
+    "StreamDiffusionPrebuiltEngine": "StreamDiffusionPrebuiltEngine",
+    "StreamDiffusionTensorRTEngineLoader": "StreamDiffusionTensorRTEngineLoader",
+    "StreamDiffusionLPCheckpointLoader": "StreamDiffusionLPCheckpointLoader",
 }

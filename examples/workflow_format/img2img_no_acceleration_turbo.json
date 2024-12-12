@@ -1,0 +1,252 @@
+{
+  "last_node_id": 181,
+  "last_link_id": 10,
+  "nodes": [
+    {
+      "id": 145,
+      "type": "StreamDiffusionAccelerationSampler",
+      "pos": [
+        1096.199951171875,
+        130
+      ],
+      "size": [
+        428.4000244140625,
+        218
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "stream_model",
+          "type": "STREAM_MODEL",
+          "link": 6
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 7,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            8
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "StreamDiffusionAccelerationSampler"
+      },
+      "widgets_values": [
+        "",
+        "",
+        50,
+        1.2,
+        1
+      ]
+    },
+    {
+      "id": 146,
+      "type": "PreviewImage",
+      "pos": [
+        1624.5999755859375,
+        130
+      ],
+      "size": [
+        210,
+        246
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 8
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      }
+    },
+    {
+      "id": 172,
+      "type": "StreamDiffusionLPModelLoader",
+      "pos": [
+        103.0819091796875,
+        14.512777328491211
+      ],
+      "size": [
+        352.79998779296875,
+        58
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "SDMODEL",
+          "type": "SDMODEL",
+          "links": [
+            9
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "StreamDiffusionLPModelLoader"
+      },
+      "widgets_values": [
+        "sd_turbo.safetensors"
+      ]
+    },
+    {
+      "id": 147,
+      "type": "LoadImage",
+      "pos": [
+        140.06507873535156,
+        128.4590301513672
+      ],
+      "size": [
+        315,
+        314
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            7
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "ryan.png",
+        "image"
+      ]
+    },
+    {
+      "id": 177,
+      "type": "StreamDiffusionEngine",
+      "pos": [
+        590.5999755859375,
+        130
+      ],
+      "size": [
+        405.5999755859375,
+        338
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "SDMODEL",
+          "link": 9
+        },
+        {
+          "name": "opt_lora_dict",
+          "type": "LORA_DICT",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "opt_advanced_config",
+          "type": "ADVANCED_CONFIG",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STREAM_MODEL",
+          "type": "STREAM_MODEL",
+          "links": [
+            6
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "StreamDiffusionEngine"
+      },
+      "widgets_values": [
+        "39,35,30",
+        "img2img",
+        512,
+        512,
+        "none",
+        1,
+        true,
+        "self",
+        true,
+        28173873,
+        "randomize"
+      ]
+    }
+  ],
+  "links": [
+    [
+      6,
+      177,
+      0,
+      145,
+      0,
+      "STREAM_MODEL"
+    ],
+    [
+      7,
+      147,
+      0,
+      145,
+      1,
+      "IMAGE"
+    ],
+    [
+      8,
+      145,
+      0,
+      146,
+      0,
+      "IMAGE"
+    ],
+    [
+      9,
+      172,
+      0,
+      177,
+      0,
+      "SDMODEL"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.9849732675808122,
+      "offset": [
+        93.06771421976694,
+        286.5854505401035
+      ]
+    }
+  },
+  "version": 0.4
+}

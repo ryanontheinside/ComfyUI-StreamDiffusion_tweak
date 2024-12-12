@@ -7,7 +7,7 @@
       "guidance_scale": 1.2,
       "delta": 1,
       "stream_model": [
-        "170",
+        "182",
         0
       ],
       "image": [
@@ -33,29 +33,31 @@
     },
     "class_type": "LoadImage"
   },
-  "168": {
+  "172": {
     "inputs": {
-      "checkpoint": "kohaku-v2.1.safetensors"
+      "model_name": "kohaku-v2.1.safetensors"
+    },
+    "class_type": "StreamDiffusionLPModelLoader"
+  },
+  "178": {
+    "inputs": {
+      "checkpoint": "3dCartoonVision_v10.safetensors"
     },
     "class_type": "StreamDiffusionCheckpointLoader"
   },
-  "170": {
+  "182": {
     "inputs": {
+      "engine_config": "Kohaku_Slime",
       "t_index_list": "39,35,30",
       "mode": "img2img",
+      "frame_buffer_size": 1,
       "width": 512,
       "height": 512,
-      "acceleration": "none",
-      "frame_buffer_size": 1,
-      "use_tiny_vae": true,
-      "cfg_type": "self",
-      "use_lcm_lora": true,
-      "seed": 2,
       "model": [
-        "168",
+        "172",
         0
       ]
     },
-    "class_type": "StreamDiffusionConfig"
+    "class_type": "StreamDiffusionPrebuiltEngine"
   }
 }

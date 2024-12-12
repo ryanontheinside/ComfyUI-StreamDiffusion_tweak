@@ -1,19 +1,4 @@
 {
-  "143": {
-    "inputs": {
-      "engine_config": "Kohaku_Slime_Dissolve",
-      "t_index_list": "39,35,34",
-      "mode": "img2img",
-      "frame_buffer_size": 1,
-      "width": 512,
-      "height": 512,
-      "model": [
-        "168",
-        0
-      ]
-    },
-    "class_type": "StreamDiffusionPrebuiltConfig"
-  },
   "145": {
     "inputs": {
       "prompt": "",
@@ -22,7 +7,7 @@
       "guidance_scale": 1.2,
       "delta": 1,
       "stream_model": [
-        "143",
+        "177",
         0
       ],
       "image": [
@@ -48,10 +33,29 @@
     },
     "class_type": "LoadImage"
   },
-  "168": {
+  "172": {
     "inputs": {
-      "checkpoint": "kohaku_slime_dissolve.safetensors"
+      "model_name": "sd_turbo.safetensors"
     },
-    "class_type": "StreamDiffusionCheckpointLoader"
+    "class_type": "StreamDiffusionLPModelLoader"
+  },
+  "177": {
+    "inputs": {
+      "t_index_list": "39,35,30",
+      "mode": "img2img",
+      "width": 512,
+      "height": 512,
+      "acceleration": "none",
+      "frame_buffer_size": 1,
+      "use_tiny_vae": true,
+      "cfg_type": "self",
+      "use_lcm_lora": true,
+      "seed": 28173873,
+      "model": [
+        "172",
+        0
+      ]
+    },
+    "class_type": "StreamDiffusionEngine"
   }
 }
