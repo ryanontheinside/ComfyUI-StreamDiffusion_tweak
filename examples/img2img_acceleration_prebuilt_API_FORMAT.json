@@ -1,0 +1,63 @@
+{
+  "145": {
+    "inputs": {
+      "prompt": "",
+      "negative_prompt": "",
+      "num_inference_steps": 50,
+      "guidance_scale": 1.2,
+      "delta": 1,
+      "stream_model": [
+        "182",
+        0
+      ],
+      "image": [
+        "147",
+        0
+      ]
+    },
+    "class_type": "StreamDiffusionAccelerationSampler"
+  },
+  "146": {
+    "inputs": {
+      "images": [
+        "145",
+        0
+      ]
+    },
+    "class_type": "PreviewImage"
+  },
+  "147": {
+    "inputs": {
+      "image": "ryan.png",
+      "upload": "image"
+    },
+    "class_type": "LoadImage"
+  },
+  "172": {
+    "inputs": {
+      "model_name": "kohaku-v2.1.safetensors"
+    },
+    "class_type": "StreamDiffusionLPModelLoader"
+  },
+  "178": {
+    "inputs": {
+      "checkpoint": "3dCartoonVision_v10.safetensors"
+    },
+    "class_type": "StreamDiffusionCheckpointLoader"
+  },
+  "182": {
+    "inputs": {
+      "engine_config": "Kohaku_Slime",
+      "t_index_list": "39,35,30",
+      "mode": "img2img",
+      "frame_buffer_size": 1,
+      "width": 512,
+      "height": 512,
+      "model": [
+        "172",
+        0
+      ]
+    },
+    "class_type": "StreamDiffusionPrebuiltEngine"
+  }
+}

@@ -1,0 +1,1 @@
+use files with the API_FORMAT suffix for comfystream, files under the workflow_format directory for opening in ComfyUI
