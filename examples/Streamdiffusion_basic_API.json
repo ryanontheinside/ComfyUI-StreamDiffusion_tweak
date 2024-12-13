@@ -1,0 +1,73 @@
+{
+  "27": {
+    "inputs": {
+      "image": "headroom.jpeg",
+      "upload": "image"
+    },
+    "class_type": "LoadImage"
+  },
+  "52": {
+    "inputs": {
+      "images": [
+        "61",
+        0
+      ]
+    },
+    "class_type": "PreviewImage"
+  },
+  "57": {
+    "inputs": {
+      "warmup": 10,
+      "do_add_noise": true,
+      "use_denoising_batch": true
+    },
+    "class_type": "StreamDiffusionAccelerationConfig"
+  },
+  "61": {
+    "inputs": {
+      "prompt": "anime",
+      "negative_prompt": "",
+      "num_inference_steps": 50,
+      "guidance_scale": 1.2,
+      "delta": 1,
+      "stream_model": [
+        "64",
+        0
+      ],
+      "image": [
+        "27",
+        0
+      ]
+    },
+    "class_type": "StreamDiffusionAccelerationSampler"
+  },
+  "64": {
+    "inputs": {
+      "t_index_list": "39,35,30",
+      "mode": "img2img",
+      "width": 512,
+      "height": 512,
+      "acceleration": "tensorrt",
+      "frame_buffer_size": 1,
+      "use_tiny_vae": true,
+      "cfg_type": "self",
+      "use_lcm_lora": true,
+      "seed": 66111582,
+      "model": [
+        "66",
+        0
+      ],
+      "opt_acceleration_config": [
+        "57",
+        0
+      ]
+    },
+    "class_type": "StreamDiffusionConfig"
+  },
+  "66": {
+    "inputs": {
+      "checkpoint": "kohaku-v2.1.safetensors"
+    },
+    "class_type": "StreamDiffusionCheckpointLoader"
+  }
+}
