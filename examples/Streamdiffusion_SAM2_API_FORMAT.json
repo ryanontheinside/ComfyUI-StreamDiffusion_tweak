@@ -15,14 +15,6 @@
     },
     "class_type": "PreviewImage"
   },
-  "57": {
-    "inputs": {
-      "warmup": 10,
-      "do_add_noise": true,
-      "use_denoising_batch": true
-    },
-    "class_type": "StreamDiffusionAccelerationConfig"
-  },
   "61": {
     "inputs": {
       "prompt": "Realistic transformation of a human face into a futuristic silver robot. The face should retain recognizable human features but with metallic silver skin, glowing blue eyes, and subtle mechanical details like circuits and panels integrated seamlessly. The overall look should be sleek and modern, with a shiny chrome finish and a slight reflection of light. The background is neutral and futuristic, softly lit to enhance the metallic details. Artistic and photorealistic style, highly detailed, ultra-sharp focus, 8k resolution.",
@@ -31,7 +23,7 @@
       "guidance_scale": 1.2,
       "delta": 1,
       "stream_model": [
-        "64",
+        "79",
         0
       ],
       "image": [
@@ -40,29 +32,6 @@
       ]
     },
     "class_type": "StreamDiffusionAccelerationSampler"
-  },
-  "64": {
-    "inputs": {
-      "t_index_list": "39,35,30",
-      "mode": "img2img",
-      "width": 512,
-      "height": 512,
-      "acceleration": "tensorrt",
-      "frame_buffer_size": 1,
-      "use_tiny_vae": true,
-      "cfg_type": "self",
-      "use_lcm_lora": true,
-      "seed": 56461981,
-      "model": [
-        "78",
-        0
-      ],
-      "opt_acceleration_config": [
-        "57",
-        0
-      ]
-    },
-    "class_type": "StreamDiffusionConfig"
   },
   "73": {
     "inputs": {
@@ -97,7 +66,8 @@
     "inputs": {
       "coordinates_positive": "[[200,256]]",
       "coordinates_negative": "",
-      "reset_tracking": true,
+      "reset_tracking": false,
+      "output_automask": false,
       "images": [
         "27",
         0
@@ -109,9 +79,28 @@
     },
     "class_type": "Sam2RealtimeSegmentation"
   },
-  "78": {
+  "79": {
     "inputs": {
-      "checkpoint": "sd_turbo.safetensors"
+      "t_index_list": "39,35,30",
+      "mode": "img2img",
+      "width": 512,
+      "height": 512,
+      "acceleration": "tensorrt",
+      "frame_buffer_size": 1,
+      "use_tiny_vae": true,
+      "cfg_type": "self",
+      "use_lcm_lora": true,
+      "seed": 94027870,
+      "model": [
+        "80",
+        0
+      ]
+    },
+    "class_type": "StreamDiffusionEngine"
+  },
+  "80": {
+    "inputs": {
+      "checkpoint": "3dCartoonVision_v10.safetensors"
     },
     "class_type": "StreamDiffusionCheckpointLoader"
   }

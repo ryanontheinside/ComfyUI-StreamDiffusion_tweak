@@ -15,23 +15,15 @@
     },
     "class_type": "PreviewImage"
   },
-  "57": {
-    "inputs": {
-      "warmup": 10,
-      "do_add_noise": true,
-      "use_denoising_batch": true
-    },
-    "class_type": "StreamDiffusionAccelerationConfig"
-  },
   "61": {
     "inputs": {
-      "prompt": "anime",
+      "prompt": "bright colors",
       "negative_prompt": "",
       "num_inference_steps": 50,
       "guidance_scale": 1.2,
       "delta": 1,
       "stream_model": [
-        "64",
+        "75",
         0
       ],
       "image": [
@@ -40,29 +32,6 @@
       ]
     },
     "class_type": "StreamDiffusionAccelerationSampler"
-  },
-  "64": {
-    "inputs": {
-      "t_index_list": "39,35,30",
-      "mode": "img2img",
-      "width": 512,
-      "height": 512,
-      "acceleration": "tensorrt",
-      "frame_buffer_size": 1,
-      "use_tiny_vae": true,
-      "cfg_type": "self",
-      "use_lcm_lora": true,
-      "seed": 3627704,
-      "model": [
-        "74",
-        0
-      ],
-      "opt_acceleration_config": [
-        "57",
-        0
-      ]
-    },
-    "class_type": "StreamDiffusionConfig"
   },
   "69": {
     "inputs": {
@@ -90,11 +59,11 @@
       "y": 0,
       "resize_source": false,
       "destination": [
-        "61",
+        "27",
         0
       ],
       "source": [
-        "27",
+        "61",
         0
       ],
       "mask": [
@@ -104,9 +73,28 @@
     },
     "class_type": "ImageCompositeMasked"
   },
-  "74": {
+  "75": {
     "inputs": {
-      "checkpoint": "sd_turbo.safetensors"
+      "t_index_list": "39,35,30",
+      "mode": "img2img",
+      "width": 512,
+      "height": 512,
+      "acceleration": "tensorrt",
+      "frame_buffer_size": 1,
+      "use_tiny_vae": true,
+      "cfg_type": "self",
+      "use_lcm_lora": true,
+      "seed": 95521537,
+      "model": [
+        "76",
+        0
+      ]
+    },
+    "class_type": "StreamDiffusionEngine"
+  },
+  "76": {
+    "inputs": {
+      "checkpoint": "3dCartoonVision_v10.safetensors"
     },
     "class_type": "StreamDiffusionCheckpointLoader"
   }

@@ -1,41 +1,7 @@
 {
-  "last_node_id": 74,
-  "last_link_id": 61,
+  "last_node_id": 76,
+  "last_link_id": 65,
   "nodes": [
-    {
-      "id": 57,
-      "type": "StreamDiffusionAccelerationConfig",
-      "pos": [
-        354,
-        351
-      ],
-      "size": [
-        415.8000183105469,
-        106
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "ACCELERATION_CONFIG",
-          "type": "ACCELERATION_CONFIG",
-          "links": [
-            38
-          ],
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "StreamDiffusionAccelerationConfig"
-      },
-      "widgets_values": [
-        10,
-        true,
-        true
-      ]
-    },
     {
       "id": 52,
       "type": "PreviewImage",
@@ -48,7 +14,7 @@
         246
       ],
       "flags": {},
-      "order": 8,
+      "order": 7,
       "mode": 0,
       "inputs": [
         {
@@ -64,78 +30,6 @@
       "widgets_values": []
     },
     {
-      "id": 64,
-      "type": "StreamDiffusionConfig",
-      "pos": [
-        700,
-        580
-      ],
-      "size": [
-        519,
-        378
-      ],
-      "flags": {},
-      "order": 4,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "model",
-          "type": "SDMODEL",
-          "link": 59
-        },
-        {
-          "name": "opt_lora_dict",
-          "type": "LORA_DICT",
-          "link": null,
-          "shape": 7
-        },
-        {
-          "name": "opt_acceleration_config",
-          "type": "ACCELERATION_CONFIG",
-          "link": 38,
-          "shape": 7
-        },
-        {
-          "name": "opt_similarity_filter_config",
-          "type": "SIMILARITY_FILTER_CONFIG",
-          "link": null,
-          "shape": 7
-        },
-        {
-          "name": "opt_device_config",
-          "type": "DEVICE_CONFIG",
-          "link": null,
-          "shape": 7
-        }
-      ],
-      "outputs": [
-        {
-          "name": "STREAM_MODEL",
-          "type": "STREAM_MODEL",
-          "links": [
-            39
-          ],
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "StreamDiffusionConfig"
-      },
-      "widgets_values": [
-        "39,35,30",
-        "img2img",
-        512,
-        512,
-        "tensorrt",
-        1,
-        true,
-        "self",
-        true,
-        3627704,
-        "randomize"
-      ]
-    },
-    {
       "id": 27,
       "type": "LoadImage",
       "pos": [
@@ -147,7 +41,7 @@
         314
       ],
       "flags": {},
-      "order": 1,
+      "order": 0,
       "mode": 0,
       "inputs": [],
       "outputs": [
@@ -157,7 +51,7 @@
           "links": [
             49,
             50,
-            61
+            64
           ],
           "slot_index": 0
         },
@@ -187,7 +81,7 @@
         58
       ],
       "flags": {},
-      "order": 3,
+      "order": 2,
       "mode": 0,
       "inputs": [
         {
@@ -225,7 +119,7 @@
         58
       ],
       "flags": {},
-      "order": 5,
+      "order": 4,
       "mode": 0,
       "inputs": [
         {
@@ -252,18 +146,78 @@
       ]
     },
     {
-      "id": 74,
+      "id": 75,
+      "type": "StreamDiffusionEngine",
+      "pos": [
+        720,
+        568
+      ],
+      "size": [
+        405.5999755859375,
+        338
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "SDMODEL",
+          "link": 62
+        },
+        {
+          "name": "opt_lora_dict",
+          "type": "LORA_DICT",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "opt_advanced_config",
+          "type": "ADVANCED_CONFIG",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STREAM_MODEL",
+          "type": "STREAM_MODEL",
+          "links": [
+            63
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "StreamDiffusionEngine"
+      },
+      "widgets_values": [
+        "39,35,30",
+        "img2img",
+        512,
+        512,
+        "tensorrt",
+        1,
+        true,
+        "self",
+        true,
+        95521537,
+        "randomize"
+      ]
+    },
+    {
+      "id": 76,
       "type": "StreamDiffusionCheckpointLoader",
       "pos": [
-        856,
-        323
+        354,
+        335
       ],
       "size": [
         390.5999755859375,
         58
       ],
       "flags": {},
-      "order": 2,
+      "order": 1,
       "mode": 0,
       "inputs": [],
       "outputs": [
@@ -271,7 +225,7 @@
           "name": "SDMODEL",
           "type": "SDMODEL",
           "links": [
-            59
+            62
           ],
           "slot_index": 0
         }
@@ -280,7 +234,7 @@
         "Node name for S&R": "StreamDiffusionCheckpointLoader"
       },
       "widgets_values": [
-        "sd_turbo.safetensors"
+        "3dCartoonVision_v10.safetensors"
       ]
     },
     {
@@ -295,13 +249,13 @@
         218
       ],
       "flags": {},
-      "order": 6,
+      "order": 5,
       "mode": 0,
       "inputs": [
         {
           "name": "stream_model",
           "type": "STREAM_MODEL",
-          "link": 39
+          "link": 63
         },
         {
           "name": "image",
@@ -315,7 +269,7 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            60
+            65
           ],
           "slot_index": 0
         }
@@ -324,7 +278,7 @@
         "Node name for S&R": "StreamDiffusionAccelerationSampler"
       },
       "widgets_values": [
-        "anime",
+        "bright colors",
         "",
         50,
         1.2,
@@ -343,18 +297,18 @@
         146
       ],
       "flags": {},
-      "order": 7,
+      "order": 6,
       "mode": 0,
       "inputs": [
         {
           "name": "destination",
           "type": "IMAGE",
-          "link": 60
+          "link": 64
         },
         {
           "name": "source",
           "type": "IMAGE",
-          "link": 61
+          "link": 65
         },
         {
           "name": "mask",
@@ -384,22 +338,6 @@
     }
   ],
   "links": [
-    [
-      38,
-      57,
-      0,
-      64,
-      2,
-      "ACCELERATION_CONFIG"
-    ],
-    [
-      39,
-      64,
-      0,
-      61,
-      0,
-      "STREAM_MODEL"
-    ],
     [
       49,
       27,
@@ -441,24 +379,32 @@
       "IMAGE"
     ],
     [
-      59,
-      74,
+      62,
+      76,
       0,
-      64,
+      75,
       0,
       "SDMODEL"
     ],
     [
-      60,
+      63,
+      75,
+      0,
       61,
+      0,
+      "STREAM_MODEL"
+    ],
+    [
+      64,
+      27,
       0,
       73,
       0,
       "IMAGE"
     ],
     [
+      65,
       61,
-      27,
       0,
       73,
       1,
@@ -469,10 +415,10 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.6830134553650711,
+      "scale": 1.1167815779424888,
       "offset": [
-        -2.020372675901857,
-        25.510644671874783
+        -431.5166818037454,
+        -104.44649606551036
       ]
     }
   },
