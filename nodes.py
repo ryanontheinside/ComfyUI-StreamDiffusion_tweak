@@ -270,11 +270,6 @@ class StreamDiffusionAccelerationSampler:
     CATEGORY = "StreamDiffusion"
     DESCRIPTION = "Generates images using the configured StreamDiffusion model and specified prompts and settings."
 
-    def __init__(self):
-        self.profile_file = "/home/ryan/comfyRealtime/ComfyUI/custom_nodes/ComfyUI-StreamDiffusion_tweak/profiling.txt"
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(self.profile_file), exist_ok=True)
-
     def get_model_config(self, stream_model, prompt, negative_prompt, num_inference_steps, 
                         guidance_scale, delta):
         """Create a configuration dictionary for comparing model states"""
