@@ -1,13 +1,13 @@
 {
-  "last_node_id": 181,
-  "last_link_id": 23,
+  "last_node_id": 184,
+  "last_link_id": 29,
   "nodes": [
     {
-      "id": 179,
+      "id": 180,
       "type": "Note",
       "pos": [
-        -115.61372375488281,
-        -396.84490966796875
+        654.05322265625,
+        -469.2499694824219
       ],
       "size": [
         269.2626037597656,
@@ -20,84 +20,70 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "these simply point at different directories for model selection, theyre interchangable"
+        "since acceleration is set to none, this will just run the diffusion model. We can add LoRA."
       ],
       "color": "#432",
       "bgcolor": "#653"
     },
     {
-      "id": 145,
-      "type": "StreamDiffusionAccelerationSampler",
+      "id": 183,
+      "type": "StreamDiffusionConfig",
       "pos": [
-        1165.955078125,
-        -152.03941345214844
+        625.0007934570312,
+        -302.7854919433594
       ],
       "size": [
-        428.4000244140625,
-        218
+        405.5999755859375,
+        338
       ],
       "flags": {},
-      "order": 7,
+      "order": 4,
       "mode": 0,
       "inputs": [
         {
-          "name": "stream_model",
-          "type": "STREAM_MODEL",
-          "link": 22
+          "name": "model",
+          "type": "SDMODEL",
+          "link": 29
         },
         {
-          "name": "image",
-          "type": "IMAGE",
-          "link": 7,
+          "name": "opt_lora_dict",
+          "type": "LORA_DICT",
+          "link": 26,
+          "shape": 7
+        },
+        {
+          "name": "opt_advanced_config",
+          "type": "ADVANCED_CONFIG",
+          "link": null,
           "shape": 7
         }
       ],
       "outputs": [
         {
-          "name": "IMAGE",
-          "type": "IMAGE",
+          "name": "STREAM_MODEL",
+          "type": "STREAM_MODEL",
           "links": [
-            8
-          ]
+            25
+          ],
+          "slot_index": 0
         }
       ],
       "properties": {
-        "Node name for S&R": "StreamDiffusionAccelerationSampler"
+        "Node name for S&R": "StreamDiffusionConfig"
       },
       "widgets_values": [
-        "",
-        "",
-        50,
-        1.2,
-        1
+        "39,35,30",
+        "img2img",
+        512,
+        512,
+        "none",
+        1,
+        true,
+        "self",
+        true,
+        76369870,
+        "randomize"
       ]
-    },
-    {
-      "id": 146,
-      "type": "PreviewImage",
-      "pos": [
-        1685.9031982421875,
-        -156.4252166748047
-      ],
-      "size": [
-        210,
-        246
-      ],
-      "flags": {},
-      "order": 8,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 8
-        }
-      ],
-      "outputs": [],
-      "properties": {
-        "Node name for S&R": "PreviewImage"
-      },
-      "widgets_values": []
     },
     {
       "id": 147,
@@ -119,8 +105,9 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            7
-          ]
+            27
+          ],
+          "slot_index": 0
         },
         {
           "name": "MASK",
@@ -137,11 +124,38 @@
       ]
     },
     {
+      "id": 184,
+      "type": "SaveImage",
+      "pos": [
+        1654.921630859375,
+        -261.8368835449219
+      ],
+      "size": [
+        315,
+        270
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 28
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "ComfyUI"
+      ]
+    },
+    {
       "id": 178,
       "type": "StreamDiffusionCheckpointLoader",
       "pos": [
-        209.80108642578125,
-        -413.28125
+        198.52047729492188,
+        -335.3425598144531
       ],
       "size": [
         331.940673828125,
@@ -155,7 +169,9 @@
         {
           "name": "SDMODEL",
           "type": "SDMODEL",
-          "links": [],
+          "links": [
+            29
+          ],
           "slot_index": 0
         }
       ],
@@ -167,71 +183,11 @@
       ]
     },
     {
-      "id": 177,
-      "type": "StreamDiffusionEngine",
-      "pos": [
-        601.7824096679688,
-        -298.77996826171875
-      ],
-      "size": [
-        405.5999755859375,
-        338
-      ],
-      "flags": {},
-      "order": 6,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "model",
-          "type": "SDMODEL",
-          "link": 21
-        },
-        {
-          "name": "opt_lora_dict",
-          "type": "LORA_DICT",
-          "link": 23,
-          "shape": 7
-        },
-        {
-          "name": "opt_advanced_config",
-          "type": "ADVANCED_CONFIG",
-          "link": null,
-          "shape": 7
-        }
-      ],
-      "outputs": [
-        {
-          "name": "STREAM_MODEL",
-          "type": "STREAM_MODEL",
-          "links": [
-            22
-          ],
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "StreamDiffusionEngine"
-      },
-      "widgets_values": [
-        "39,35,30",
-        "img2img",
-        512,
-        512,
-        "none",
-        1,
-        true,
-        "self",
-        true,
-        2,
-        "randomize"
-      ]
-    },
-    {
       "id": 181,
       "type": "StreamDiffusionLoraLoader",
       "pos": [
-        215.73756408691406,
-        -169.8670654296875
+        210.61001586914062,
+        -206.78546142578125
       ],
       "size": [
         315,
@@ -253,8 +209,9 @@
           "name": "LORA_DICT",
           "type": "LORA_DICT",
           "links": [
-            23
-          ]
+            26
+          ],
+          "slot_index": 0
         }
       ],
       "properties": {
@@ -266,111 +223,104 @@
       ]
     },
     {
-      "id": 172,
-      "type": "StreamDiffusionLPModelLoader",
+      "id": 182,
+      "type": "StreamDiffusionSampler",
       "pos": [
-        189.8327178955078,
-        -298.0689697265625
+        1156.093017578125,
+        -277.96807861328125
       ],
       "size": [
-        352.79998779296875,
-        58
+        400,
+        218
       ],
       "flags": {},
-      "order": 4,
+      "order": 5,
       "mode": 0,
-      "inputs": [],
+      "inputs": [
+        {
+          "name": "stream_model",
+          "type": "STREAM_MODEL",
+          "link": 25
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 27,
+          "shape": 7
+        }
+      ],
       "outputs": [
         {
-          "name": "SDMODEL",
-          "type": "SDMODEL",
+          "name": "IMAGE",
+          "type": "IMAGE",
           "links": [
-            21
+            28
           ],
           "slot_index": 0
         }
       ],
       "properties": {
-        "Node name for S&R": "StreamDiffusionLPModelLoader"
+        "Node name for S&R": "StreamDiffusionSampler"
       },
       "widgets_values": [
-        "kohaku-v2.1.safetensors"
+        "ral-dissolve",
+        "",
+        50,
+        1.2,
+        1
       ]
-    },
-    {
-      "id": 180,
-      "type": "Note",
-      "pos": [
-        654.05322265625,
-        -469.2499694824219
-      ],
-      "size": [
-        269.2626037597656,
-        115.39826202392578
-      ],
-      "flags": {},
-      "order": 5,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [],
-      "properties": {},
-      "widgets_values": [
-        "since acceleration is set to none, this will just run the diffusion model. We can add LoRA."
-      ],
-      "color": "#432",
-      "bgcolor": "#653"
     }
   ],
   "links": [
     [
-      7,
-      147,
+      25,
+      183,
       0,
-      145,
-      1,
-      "IMAGE"
-    ],
-    [
-      8,
-      145,
-      0,
-      146,
-      0,
-      "IMAGE"
-    ],
-    [
-      21,
-      172,
-      0,
-      177,
-      0,
-      "SDMODEL"
-    ],
-    [
-      22,
-      177,
-      0,
-      145,
+      182,
       0,
       "STREAM_MODEL"
     ],
     [
-      23,
+      26,
       181,
       0,
-      177,
+      183,
       1,
       "LORA_DICT"
+    ],
+    [
+      27,
+      147,
+      0,
+      182,
+      1,
+      "IMAGE"
+    ],
+    [
+      28,
+      182,
+      0,
+      184,
+      0,
+      "IMAGE"
+    ],
+    [
+      29,
+      178,
+      0,
+      183,
+      0,
+      "SDMODEL"
     ]
   ],
   "groups": [],
   "config": {},
   "extra": {
     "ds": {
-      "scale": 1.0834705943388936,
+      "scale": 1.0834705943388956,
       "offset": [
-        130.61332369837567,
-        525.2724065927227
+        -158.06259162945642,
+        492.0717026735891
       ]
     }
   },
