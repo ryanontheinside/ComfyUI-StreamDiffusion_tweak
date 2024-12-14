@@ -377,67 +377,56 @@ class StreamDiffusionSampler:
                     self._log("Profiling complete!")
                     raise Exception(f"Profiling complete! {self._max_iterations} iterations processed.")
 
-        with timer("StreamDiffusionSampler.generate total time"):
-            model, config = stream_model
-            
-            current_params = {
-                'prompt': prompt,
-                'negative_prompt': negative_prompt,
-                'num_inference_steps': num_inference_steps,
-                'guidance_scale': guidance_scale,
-                'delta': delta
-            }
+        model, config = stream_model
+        
+        current_params = {
+            'prompt': prompt,
+            'negative_prompt': negative_prompt,
+            'num_inference_steps': num_inference_steps,
+            'guidance_scale': guidance_scale,
+            'delta': delta
+        }
 
-            needs_prepare = self._cached_params != current_params
-            needs_warmup = self._cached_config != config
+        needs_prepare = self._cached_params != current_params
+        needs_warmup = self._cached_config != config
+        
+        if needs_prepare:
+        
+            self._cached_params = current_params
+            model.prepare(
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+                delta=delta
+            )
+        
+        if model.mode == "img2img" and image is not None:
+            batch_size = image.shape[0]
+            outputs = []
             
-            if needs_prepare:
-                with timer("model.prepare"):
-                    self._cached_params = current_params
-                    model.prepare(
-                        prompt=prompt,
-                        negative_prompt=negative_prompt,
-                        num_inference_steps=num_inference_steps,
-                        guidance_scale=guidance_scale,
-                        delta=delta
-                    )
-            
-            if model.mode == "img2img" and image is not None:
-                with timer("img2img processing"):
-                    batch_size = image.shape[0]
-                    outputs = []
-                    
-                    for i in range(batch_size):
-                        with timer(f"batch item {i} processing"):
-                            with timer("image format conversion"):
-                                image_tensor = image[i].permute(2, 0, 1).unsqueeze(0)
-                            
-                            if needs_warmup:
-                                with timer("model warmup"):
-                                    self._cached_config = config
-                                    for _ in range(model.batch_size - 1):
-                                        model(image=image_tensor)
-                                    needs_warmup = False
+            for i in range(batch_size):
+                image_tensor = image[i].permute(2, 0, 1).unsqueeze(0)
+                
+                if needs_warmup:
+                    self._cached_config = config
+                    for _ in range(model.batch_size - 1):
+                        model(image=image_tensor)
+                    needs_warmup = False
 
-                            with timer("model inference"):
-                                output = model(image=image_tensor)
-                            
-                            with timer("output format conversion"):
-                                output = output.permute(1, 2, 0)
-                                output = output.unsqueeze(0)
-                            
-                            outputs.append(output)
-                    
-                    with timer("batch stacking"):
-                        output_tensor = torch.cat(outputs, dim=0)
-            else:
-                with timer("txt2img processing"):
-                    with timer("model inference"):
-                        output = model.txt2img()
-                    with timer("output format conversion"):
-                        output = output.permute(1, 2, 0)
-                        output = output.unsqueeze(0)
-                        output_tensor = output
+                output = model(image=image_tensor)
+                
+                output = output.permute(1, 2, 0)
+                output = output.unsqueeze(0)
+                
+                outputs.append(output)
+            
+            output_tensor = torch.cat(outputs, dim=0)
+        else:
+            output = model.txt2img()
+            output = output.permute(1, 2, 0)
+            output = output.unsqueeze(0)
+            output_tensor = output
 
         # Record iteration time if profiling
         if self.__class__._is_profiling:
