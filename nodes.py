@@ -3,6 +3,11 @@ import os
 import folder_paths
 from .streamdiffusionwrapper import StreamDiffusionWrapper
 import inspect
+import cProfile
+import time
+from datetime import datetime
+import pstats
+from .test_utils import create_profile_visualizations, timer
 
 ENGINE_DIR = os.path.join(folder_paths.models_dir, "StreamDiffusion--engines")
 LIVE_PEER_CHECKPOINT_DIR = os.path.join(folder_paths.models_dir,"models/ComfyUI--models/checkpoints")
@@ -245,8 +250,6 @@ class StreamDiffusionAdvancedConfig:
         return (advanced_config,)
 
 class StreamDiffusionSampler:
-    _cached_config = None  # Will store config
-    _cached_params = None  # Will store params
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -269,72 +272,178 @@ class StreamDiffusionSampler:
     CATEGORY = "StreamDiffusion"
     DESCRIPTION = "Generates images using the configured StreamDiffusion model and specified prompts and settings."
 
+    # Class-level storage for profiling
+    _cached_config = None
+    _cached_params = None
+    _iteration_times = []
+    _profiler = None
+    _start_time = None
+    _call_count = 0
+    _max_iterations = 500
+    _is_profiling = False
+    _log_file = None
+
     def __init__(self):
-        self.profile_file = "/home/ryan/comfyRealtime/ComfyUI/custom_nodes/ComfyUI-StreamDiffusion_tweak/profiling.txt"
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(self.profile_file), exist_ok=True)
+        # Create profile output directory
+        self.profile_dir = "/home/ryan/comfyRealtime/ComfyUI_rv/custom_nodes/ComfyUI-StreamDiffusion_tweak/profile_results"
+        os.makedirs(self.profile_dir, exist_ok=True)
+        
+        # Setup log file
+        if not self.__class__._log_file:
+            log_path = os.path.join(self.profile_dir, "profiler_log.txt")
+            self.__class__._log_file = open(log_path, 'a')
+            self._log(f"\n\n--- New Profiling Session Started at {datetime.now()} ---\n")
+        
+        # Initialize profiling if not already active
+        if not self.__class__._is_profiling:
+            self._log("Initializing profiler for 500 iterations...")
+            self.__class__._profiler = cProfile.Profile()
+            self.__class__._start_time = time.perf_counter()
+            self.__class__._iteration_times = []
+            self.__class__._call_count = 0
+            self.__class__._is_profiling = True
+            self.__class__._profiler.enable()
+
+    def _log(self, message):
+        """Write message to log file with timestamp"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        self.__class__._log_file.write(f"[{timestamp}] {message}\n")
+        self.__class__._log_file.flush()
+
+    def _dump_stats(self):
+        """Dump final stats and raise completion exception"""
+        try:
+            self._log(f"Dumping stats after {self._max_iterations} iterations...")
+            current_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            profile_path = os.path.join(self.profile_dir, f"profile_stats_{current_timestamp}")
+            
+            # Disable profiler
+            self.__class__._profiler.disable()
+            
+            if not self.__class__._iteration_times:
+                raise ValueError("No iteration times recorded")
+                
+            # Calculate statistics
+            avg_time = sum(self.__class__._iteration_times) / len(self.__class__._iteration_times)
+            max_time = max(self.__class__._iteration_times)
+            min_time = min(self.__class__._iteration_times)
+            fps = 1.0 / avg_time
+            total_time = time.perf_counter() - self.__class__._start_time
+            
+            # Save stats to file
+            with open(f"{profile_path}_stats.txt", 'w') as f:
+                f.write(f"Final Statistics for {self._max_iterations} iterations:\n")
+                f.write(f"Total execution time: {total_time:.2f} seconds\n")
+                f.write(f"Average iteration time: {avg_time:.4f} seconds\n")
+                f.write(f"Maximum iteration time: {max_time:.4f} seconds\n")
+                f.write(f"Minimum iteration time: {min_time:.4f} seconds\n")
+                f.write(f"Average FPS: {fps:.2f}\n")
+            
+            # Save profiling data
+            stats = pstats.Stats(self.__class__._profiler)
+            stats.sort_stats('cumulative')
+            stats.dump_stats(f"{profile_path}.prof")
+            
+            # Create visualizations
+            create_profile_visualizations(self.__class__._iteration_times, self.profile_dir)
+            
+            # Reset class-level storage
+            self.__class__._iteration_times = []
+            self.__class__._profiler = None
+            self.__class__._start_time = None
+            self.__class__._call_count = 0
+            self.__class__._is_profiling = False
+            
+            self._log(f"Profile results saved to: {profile_path}")
+            return True
+            
+        except Exception as e:
+            self._log(f"Error during stats dump: {str(e)}")
+            return False
 
     def generate(self, stream_model, prompt, negative_prompt, num_inference_steps, 
                 guidance_scale, delta, image=None):
         
-        #stream_model is a tuple of (model, config)
-        model, config = stream_model
-        
-        current_params = {
-            'prompt': prompt,
-            'negative_prompt': negative_prompt,
-            'num_inference_steps': num_inference_steps,
-            'guidance_scale': guidance_scale,
-            'delta': delta
-        }
+        # Track iteration if profiling
+        if self.__class__._is_profiling:
+            self.__class__._call_count += 1
+            iter_start = time.perf_counter()
+            
+            self._log(f"Processing iteration {self.__class__._call_count}/{self._max_iterations}")
+            
+            # Check if we need to dump stats
+            if self.__class__._call_count >= self._max_iterations:
+                if self._dump_stats():
+                    self._log("Profiling complete!")
+                    raise Exception(f"Profiling complete! {self._max_iterations} iterations processed.")
 
-        needs_prepare = self._cached_params != current_params
-        needs_warmup = self._cached_config != config
-        
-        if needs_prepare:
-            self._cached_params = current_params
-            model.prepare(
-                prompt=prompt,
-                negative_prompt=negative_prompt,
-                num_inference_steps=num_inference_steps,
-                guidance_scale=guidance_scale,
-                delta=delta
-            )
+        with timer("StreamDiffusionSampler.generate total time"):
+            model, config = stream_model
             
-        if model.mode == "img2img" and image is not None:
-            # Handle batch of images
-            batch_size = image.shape[0]
-            outputs = []
+            current_params = {
+                'prompt': prompt,
+                'negative_prompt': negative_prompt,
+                'num_inference_steps': num_inference_steps,
+                'guidance_scale': guidance_scale,
+                'delta': delta
+            }
+
+            needs_prepare = self._cached_params != current_params
+            needs_warmup = self._cached_config != config
             
-            for i in range(batch_size):
-                # Convert from BHWC to BCHW format for model input
-                image_tensor = image[i].permute(2, 0, 1).unsqueeze(0)
-                # Warmup model
-                if needs_warmup:
-                    self._cached_config = config
-                    for _ in range(model.batch_size - 1):
-                        model(image=image_tensor)
-                    needs_warmup = False
+            if needs_prepare:
+                with timer("model.prepare"):
+                    self._cached_params = current_params
+                    model.prepare(
+                        prompt=prompt,
+                        negative_prompt=negative_prompt,
+                        num_inference_steps=num_inference_steps,
+                        guidance_scale=guidance_scale,
+                        delta=delta
+                    )
+            
+            if model.mode == "img2img" and image is not None:
+                with timer("img2img processing"):
+                    batch_size = image.shape[0]
+                    outputs = []
                     
+                    for i in range(batch_size):
+                        with timer(f"batch item {i} processing"):
+                            with timer("image format conversion"):
+                                image_tensor = image[i].permute(2, 0, 1).unsqueeze(0)
+                            
+                            if needs_warmup:
+                                with timer("model warmup"):
+                                    self._cached_config = config
+                                    for _ in range(model.batch_size - 1):
+                                        model(image=image_tensor)
+                                    needs_warmup = False
 
-                output = model(image=image_tensor)
-                
-                # Convert CHW to BHWC
-                output = output.permute(1, 2, 0)
-                output = output.unsqueeze(0)  # Add batch dimension
-                
-                outputs.append(output)
-            
-            # Stack outputs
-            output_tensor = torch.cat(outputs, dim=0)
-            
-        else:
-            # Text to image generation
-            output = model.txt2img()
-            # Convert CHW to BHWC
-            output = output.permute(1, 2, 0)
-            output = output.unsqueeze(0)  # Add batch dimension
-            
+                            with timer("model inference"):
+                                output = model(image=image_tensor)
+                            
+                            with timer("output format conversion"):
+                                output = output.permute(1, 2, 0)
+                                output = output.unsqueeze(0)
+                            
+                            outputs.append(output)
+                    
+                    with timer("batch stacking"):
+                        output_tensor = torch.cat(outputs, dim=0)
+            else:
+                with timer("txt2img processing"):
+                    with timer("model inference"):
+                        output = model.txt2img()
+                    with timer("output format conversion"):
+                        output = output.permute(1, 2, 0)
+                        output = output.unsqueeze(0)
+                        output_tensor = output
+
+        # Record iteration time if profiling
+        if self.__class__._is_profiling:
+            iter_time = time.perf_counter() - iter_start
+            self.__class__._iteration_times.append(iter_time)
+
         return (output_tensor,)
 
 class StreamDiffusionConfigMixin:

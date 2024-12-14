@@ -1,0 +1,7 @@
+#turbo, no acceleration
+Final Statistics for 500 iterations:
+Total execution time: 84.35 seconds
+Average iteration time: 0.1180 seconds
+Maximum iteration time: 4.2120 seconds
+Minimum iteration time: 0.0949 seconds
+Average FPS: 8.47
