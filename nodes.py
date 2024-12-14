@@ -89,6 +89,7 @@ class StreamDiffusionTensorRTEngineLoader:
     def load_engine(self, engine_name):
         return (os.path.join(ENGINE_DIR, engine_name),)
 
+#TODO: remove?
 class StreamDiffusionLPCheckpointLoader:
     @classmethod
     def INPUT_TYPES(s):
@@ -243,9 +244,9 @@ class StreamDiffusionAdvancedConfig:
         
         return (advanced_config,)
 
-class StreamDiffusionAccelerationSampler:
-    _cached_config = None  # Will store both config and prepared model
-    
+class StreamDiffusionSampler:
+    _cached_config = None  # Will store config
+    _cached_params = None  # Will store params
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -270,19 +271,24 @@ class StreamDiffusionAccelerationSampler:
 
     def generate(self, stream_model, prompt, negative_prompt, num_inference_steps, 
                 guidance_scale, delta, image=None):
-        stream_model, config = stream_model
-
-        config['prompt'] = prompt
-        config['negative_prompt'] = negative_prompt
-        config['num_inference_steps'] = num_inference_steps
-        config['guidance_scale'] = guidance_scale
-        config['delta'] = delta
-
-        new_model = self._cached_config != config
         
-        if new_model:
-            self._cached_config = config
-            stream_model.prepare(
+        #stream_model is a tuple of (model, config)
+        model, config = stream_model
+        
+        current_params = {
+            'prompt': prompt,
+            'negative_prompt': negative_prompt,
+            'num_inference_steps': num_inference_steps,
+            'guidance_scale': guidance_scale,
+            'delta': delta
+        }
+
+        needs_prepare = self._cached_params != current_params
+        needs_warmup = self._cached_config != config
+        
+        if needs_prepare:
+            self._cached_params = current_params
+            model.prepare(
                 prompt=prompt,
                 negative_prompt=negative_prompt,
                 num_inference_steps=num_inference_steps,
@@ -290,7 +296,7 @@ class StreamDiffusionAccelerationSampler:
                 delta=delta
             )
             
-        if stream_model.mode == "img2img" and image is not None:
+        if model.mode == "img2img" and image is not None:
             # Handle batch of images
             batch_size = image.shape[0]
             outputs = []
@@ -298,15 +304,15 @@ class StreamDiffusionAccelerationSampler:
             for i in range(batch_size):
                 # Convert from BHWC to BCHW format for model input
                 image_tensor = image[i].permute(2, 0, 1).unsqueeze(0)
-
                 # Warmup model
-                if new_model:
-                    for _ in range(stream_model.batch_size - 1):
-                        stream_model(image=image_tensor)
-                    new_model = False
+                if needs_warmup:
+                    self._cached_config = config
+                    for _ in range(model.batch_size - 1):
+                        model(image=image_tensor)
+                    needs_warmup = False
+                    
 
-                
-                output = stream_model(image=image_tensor)
+                output = model(image=image_tensor)
                 
                 # Convert CHW to BHWC
                 output = output.permute(1, 2, 0)
@@ -319,8 +325,7 @@ class StreamDiffusionAccelerationSampler:
             
         else:
             # Text to image generation
-            output = stream_model.txt2img()
-            
+            output = model.txt2img()
             # Convert CHW to BHWC
             output = output.permute(1, 2, 0)
             output = output.unsqueeze(0)  # Add batch dimension
@@ -345,7 +350,7 @@ class StreamDiffusionConfigMixin:
         
         return config
 
-class StreamDiffusionEngine(StreamDiffusionConfigMixin):
+class StreamDiffusionConfig(StreamDiffusionConfigMixin):
     @classmethod
     def INPUT_TYPES(s):
         defaults = _get_wrapper_params()
@@ -417,7 +422,7 @@ If a suitable engine does not exist, it will be created. This can be used with a
         return (wrapper,)
 
 #TODO: confirm this works well with container deployment
-class StreamDiffusionPrebuiltEngine(StreamDiffusionConfigMixin):
+class StreamDiffusionPrebuiltConfig(StreamDiffusionConfigMixin):
     @classmethod
     def INPUT_TYPES(s):
         defaults = _get_wrapper_params()
@@ -473,23 +478,23 @@ class StreamDiffusionPrebuiltEngine(StreamDiffusionConfigMixin):
         return (wrapper,)
 
 NODE_CLASS_MAPPINGS = {
-    "StreamDiffusionEngine": StreamDiffusionEngine,
-    "StreamDiffusionAccelerationSampler": StreamDiffusionAccelerationSampler,
-    "StreamDiffusionPrebuiltEngine": StreamDiffusionPrebuiltEngine,
+    "StreamDiffusionConfig": StreamDiffusionConfig,
+    "StreamDiffusionSampler": StreamDiffusionSampler,
+    "StreamDiffusionPrebuiltConfig": StreamDiffusionPrebuiltConfig,
     "StreamDiffusionLoraLoader": StreamDiffusionLoraLoader,
     "StreamDiffusionAdvancedConfig": StreamDiffusionAdvancedConfig,
     "StreamDiffusionCheckpointLoader": StreamDiffusionCheckpointLoader,
     "StreamDiffusionTensorRTEngineLoader": StreamDiffusionTensorRTEngineLoader,
-    "StreamDiffusionLPModelLoader": StreamDiffusionLPCheckpointLoader,   
+    "StreamDiffusionLPCheckpointLoader": StreamDiffusionLPCheckpointLoader,   
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "StreamDiffusionEngine": "StreamDiffusionEngine",
-    "StreamDiffusionAccelerationSampler": "StreamDiffusionAccelerationSampler",
+    "StreamDiffusionConfig": "StreamDiffusionConfig",
+    "StreamDiffusionSampler": "StreamDiffusionSampler",
+    "StreamDiffusionPrebuiltConfig": "StreamDiffusionPrebuiltConfig",
     "StreamDiffusionLoraLoader": "StreamDiffusionLoraLoader",
     "StreamDiffusionAdvancedConfig": "StreamDiffusionAdvancedConfig",
     "StreamDiffusionCheckpointLoader": "StreamDiffusionCheckpointLoader",
-    "StreamDiffusionPrebuiltEngine": "StreamDiffusionPrebuiltEngine",
     "StreamDiffusionTensorRTEngineLoader": "StreamDiffusionTensorRTEngineLoader",
     "StreamDiffusionLPCheckpointLoader": "StreamDiffusionLPCheckpointLoader",
 }

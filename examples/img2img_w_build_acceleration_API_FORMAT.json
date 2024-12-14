@@ -1,31 +1,4 @@
 {
-  "145": {
-    "inputs": {
-      "prompt": "",
-      "negative_prompt": "",
-      "num_inference_steps": 50,
-      "guidance_scale": 1.2,
-      "delta": 1,
-      "stream_model": [
-        "177",
-        0
-      ],
-      "image": [
-        "147",
-        0
-      ]
-    },
-    "class_type": "StreamDiffusionAccelerationSampler"
-  },
-  "146": {
-    "inputs": {
-      "images": [
-        "145",
-        0
-      ]
-    },
-    "class_type": "PreviewImage"
-  },
   "147": {
     "inputs": {
       "image": "ryan.png",
@@ -33,13 +6,31 @@
     },
     "class_type": "LoadImage"
   },
-  "172": {
+  "178": {
     "inputs": {
-      "model_name": "kohaku-v2.1.safetensors"
+      "checkpoint": "kohaku-v2.1.safetensors"
     },
-    "class_type": "StreamDiffusionLPModelLoader"
+    "class_type": "StreamDiffusionCheckpointLoader"
   },
-  "177": {
+  "181": {
+    "inputs": {
+      "prompt": "",
+      "negative_prompt": "",
+      "num_inference_steps": 50,
+      "guidance_scale": 1.21,
+      "delta": 1,
+      "stream_model": [
+        "182",
+        0
+      ],
+      "image": [
+        "147",
+        0
+      ]
+    },
+    "class_type": "StreamDiffusionSampler"
+  },
+  "182": {
     "inputs": {
       "t_index_list": "39,35,30",
       "mode": "img2img",
@@ -50,18 +41,22 @@
       "use_tiny_vae": true,
       "cfg_type": "self",
       "use_lcm_lora": true,
-      "seed": 2,
+      "seed": 39738681,
       "model": [
-        "172",
+        "178",
         0
       ]
     },
-    "class_type": "StreamDiffusionEngine"
+    "class_type": "StreamDiffusionConfig"
   },
-  "178": {
+  "183": {
     "inputs": {
-      "checkpoint": "3dCartoonVision_v10.safetensors"
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "181",
+        0
+      ]
     },
-    "class_type": "StreamDiffusionCheckpointLoader"
+    "class_type": "SaveImage"
   }
 }
