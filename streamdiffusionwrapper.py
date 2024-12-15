@@ -16,7 +16,7 @@ import cProfile
 import pstats
 import time
 from datetime import datetime
-from .test_utils import create_profile_visualizations
+from .test_utils import create_profile_visualizations, timer
 
 torch.set_grad_enabled(False)
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -349,24 +349,31 @@ class StreamDiffusionWrapper:
                     self._log("Profiling complete!")
                     raise Exception(f"Profiling complete! {self._max_iterations} iterations processed.")
 
-        if prompt is not None:
-            self.stream.update_prompt(prompt)
+        with timer('total_img2img'):
+            if prompt is not None:
+                with timer('update_prompt'):
+                    self.stream.update_prompt(prompt)
 
-        if isinstance(image, str) or isinstance(image, Image.Image):
-            image = self.preprocess_image(image)
+            if isinstance(image, str) or isinstance(image, Image.Image):
+                with timer('preprocess_image'):
+                    image = self.preprocess_image(image)
 
-        image_tensor = self.stream(image)
-        image = self.postprocess_image(image_tensor, output_type=self.output_type)
+            with timer('stream_processing'):
+                image_tensor = self.stream(image)
+            
+            with timer('postprocess_image'):
+                image = self.postprocess_image(image_tensor, output_type=self.output_type)
 
-        if self.use_safety_checker:
-            safety_checker_input = self.feature_extractor(
-                image, return_tensors="pt"
-            ).to(self.device)
-            _, has_nsfw_concept = self.safety_checker(
-                images=image_tensor.to(self.dtype),
-                clip_input=safety_checker_input.pixel_values.to(self.dtype),
-            )
-            image = self.nsfw_fallback_img if has_nsfw_concept[0] else image
+            if self.use_safety_checker:
+                with timer('safety_checker'):
+                    safety_checker_input = self.feature_extractor(
+                        image, return_tensors="pt"
+                    ).to(self.device)
+                    _, has_nsfw_concept = self.safety_checker(
+                        images=image_tensor.to(self.dtype),
+                        clip_input=safety_checker_input.pixel_values.to(self.dtype),
+                    )
+                    image = self.nsfw_fallback_img if has_nsfw_concept[0] else image
 
         # Record iteration time if profiling
         if self.__class__._is_profiling:

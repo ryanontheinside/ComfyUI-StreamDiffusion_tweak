@@ -1,0 +1,6 @@
+Final Statistics for 499 iterations:
+Total execution time: 78.72 seconds
+Average iteration time: 0.1075 seconds
+Maximum iteration time: 3.9986 seconds
+Minimum iteration time: 0.0353 seconds
+Average FPS: 9.31
