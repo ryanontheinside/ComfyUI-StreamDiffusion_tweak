@@ -12,6 +12,11 @@ from diffusers import AutoencoderTiny, StableDiffusionPipeline
 from PIL import Image
 from streamdiffusion import StreamDiffusion
 from streamdiffusion.image_utils import postprocess_image
+import cProfile
+import pstats
+import time
+from datetime import datetime
+from .test_utils import create_profile_visualizations
 
 torch.set_grad_enabled(False)
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -19,6 +24,15 @@ torch.backends.cudnn.allow_tf32 = True
 
 
 class StreamDiffusionWrapper:
+    # Class-level variables for profiling
+    _iteration_times = []
+    _profiler = None
+    _start_time = None
+    _call_count = 0
+    _max_iterations = 499
+    _is_profiling = False
+    _log_file = None
+
     def __init__(
         self,
         model_id_or_path: str,
@@ -175,6 +189,26 @@ class StreamDiffusionWrapper:
                 similar_image_filter_threshold, similar_image_filter_max_skip_frame
             )
 
+        # Initialize profiling
+        self.profile_dir = "/home/ryan/comfyRealtime/ComfyUI_rv/custom_nodes/ComfyUI-StreamDiffusion_tweak/profile_results"
+        os.makedirs(self.profile_dir, exist_ok=True)
+        
+        # Setup log file
+        if not self.__class__._log_file:
+            log_path = os.path.join(self.profile_dir, "wrapper_profiler_log.txt")
+            self.__class__._log_file = open(log_path, 'a')
+            self._log(f"\n\n--- New Profiling Session Started at {datetime.now()} ---\n")
+        
+        # Initialize profiling if not already active
+        if not self.__class__._is_profiling:
+            self._log(f"Initializing profiler for {self._max_iterations} iterations...")
+            self.__class__._profiler = cProfile.Profile()
+            self.__class__._start_time = time.perf_counter()
+            self.__class__._iteration_times = []
+            self.__class__._call_count = 0
+            self.__class__._is_profiling = True
+            self.__class__._profiler.enable()
+
     def prepare(
         self,
         prompt: str,
@@ -247,6 +281,19 @@ class StreamDiffusionWrapper:
         Union[Image.Image, List[Image.Image]]
             The generated image.
         """
+        # Start profiling for this iteration
+        if self.__class__._is_profiling:
+            self.__class__._call_count += 1
+            iter_start = time.perf_counter()
+            
+            self._log(f"Processing iteration {self.__class__._call_count}/{self._max_iterations}")
+            
+            # Check if we need to dump stats
+            if self.__class__._call_count >= self._max_iterations:
+                if self._dump_stats():
+                    self._log("Profiling complete!")
+                    raise Exception(f"Profiling complete! {self._max_iterations} iterations processed.")
+
         if prompt is not None:
             self.stream.update_prompt(prompt)
 
@@ -266,6 +313,11 @@ class StreamDiffusionWrapper:
             )
             image = self.nsfw_fallback_img if has_nsfw_concept[0] else image
 
+        # Record iteration time if profiling
+        if self.__class__._is_profiling:
+            iter_time = time.perf_counter() - iter_start
+            self.__class__._iteration_times.append(iter_time)
+
         return image
 
     def img2img(
@@ -284,6 +336,19 @@ class StreamDiffusionWrapper:
         Image.Image
             The generated image.
         """
+        # Start profiling for this iteration
+        if self.__class__._is_profiling:
+            self.__class__._call_count += 1
+            iter_start = time.perf_counter()
+            
+            self._log(f"Processing iteration {self.__class__._call_count}/{self._max_iterations}")
+            
+            # Check if we need to dump stats
+            if self.__class__._call_count >= self._max_iterations:
+                if self._dump_stats():
+                    self._log("Profiling complete!")
+                    raise Exception(f"Profiling complete! {self._max_iterations} iterations processed.")
+
         if prompt is not None:
             self.stream.update_prompt(prompt)
 
@@ -302,6 +367,11 @@ class StreamDiffusionWrapper:
                 clip_input=safety_checker_input.pixel_values.to(self.dtype),
             )
             image = self.nsfw_fallback_img if has_nsfw_concept[0] else image
+
+        # Record iteration time if profiling
+        if self.__class__._is_profiling:
+            iter_time = time.perf_counter() - iter_start
+            self.__class__._iteration_times.append(iter_time)
 
         return image
 
@@ -663,3 +733,68 @@ class StreamDiffusionWrapper:
             self.nsfw_fallback_img = Image.new("RGB", (512, 512), (0, 0, 0))
 
         return stream
+
+    def _log(self, message):
+        """Write message to log file with timestamp"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        if self.__class__._log_file is None:
+            log_path = os.path.join(self.profile_dir, "wrapper_profiler_log.txt")
+            self.__class__._log_file = open(log_path, 'a')
+        self.__class__._log_file.write(f"[{timestamp}] {message}\n")
+        self.__class__._log_file.flush()
+
+    def _dump_stats(self):
+        """Dump final stats and raise completion exception"""
+        try:
+            self._log(f"Dumping stats after {self._max_iterations} iterations...")
+            current_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            profile_path = os.path.join(self.profile_dir, f"wrapper_profile_stats_{current_timestamp}")
+            
+            # Disable profiler
+            self.__class__._profiler.disable()
+            
+            if not self.__class__._iteration_times:
+                raise ValueError("No iteration times recorded")
+                
+            # Calculate statistics
+            avg_time = sum(self.__class__._iteration_times) / len(self.__class__._iteration_times)
+            max_time = max(self.__class__._iteration_times)
+            min_time = min(self.__class__._iteration_times)
+            fps = 1.0 / avg_time if avg_time > 0 else float('inf')
+            total_time = time.perf_counter() - self.__class__._start_time
+            
+            # Save stats to file
+            with open(f"{profile_path}_stats.txt", 'w') as f:
+                f.write(f"Final Statistics for {self._max_iterations} iterations:\n")
+                f.write(f"Total execution time: {total_time:.2f} seconds\n")
+                f.write(f"Average iteration time: {avg_time:.4f} seconds\n")
+                f.write(f"Maximum iteration time: {max_time:.4f} seconds\n")
+                f.write(f"Minimum iteration time: {min_time:.4f} seconds\n")
+                f.write(f"Average FPS: {fps:.2f}\n")
+            
+            # Save profiling data
+            stats = pstats.Stats(self.__class__._profiler)
+            stats.sort_stats('cumulative')
+            stats.dump_stats(f"{profile_path}.prof")
+            
+            # Create visualizations
+            create_profile_visualizations(self.__class__._iteration_times, self.profile_dir, prefix='wrapper_')
+            
+            # Reset class-level storage
+            self.__class__._iteration_times = []
+            self.__class__._profiler = None
+            self.__class__._start_time = None
+            self.__class__._call_count = 0
+            self.__class__._is_profiling = False
+            
+            self._log(f"Profile results saved to: {profile_path}")
+            return True
+            
+        except Exception as e:
+            self._log(f"Error during stats dump: {str(e)}")
+            return False
+
+    def __del__(self):
+        if self.__class__._is_profiling:
+            self._log("Profiling ended before max iterations.")
+            self._dump_stats()
