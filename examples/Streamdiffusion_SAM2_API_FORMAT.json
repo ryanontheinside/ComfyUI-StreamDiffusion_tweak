@@ -31,7 +31,7 @@
         0
       ]
     },
-    "class_type": "StreamDiffusionAccelerationSampler"
+    "class_type": "StreamDiffusionSampler"
   },
   "73": {
     "inputs": {
@@ -96,7 +96,7 @@
         0
       ]
     },
-    "class_type": "StreamDiffusionEngine"
+    "class_type": "StreamDiffusionConfig"
   },
   "80": {
     "inputs": {
