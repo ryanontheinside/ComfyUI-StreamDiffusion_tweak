@@ -85,12 +85,12 @@
       "mode": "img2img",
       "width": 512,
       "height": 512,
-      "acceleration": "tensorrt",
+      "acceleration": "none",
       "frame_buffer_size": 1,
       "use_tiny_vae": true,
       "cfg_type": "self",
       "use_lcm_lora": true,
-      "seed": 17639872,
+      "seed": 82634992,
       "model": [
         "80",
         0
