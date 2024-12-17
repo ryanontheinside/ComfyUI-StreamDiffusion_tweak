@@ -89,6 +89,7 @@ class StreamDiffusionTensorRTEngineLoader:
     def load_engine(self, engine_name):
         return (os.path.join(ENGINE_DIR, engine_name),)
 
+#TODO: remove?
 class StreamDiffusionLPCheckpointLoader:
     @classmethod
     def INPUT_TYPES(s):
@@ -243,11 +244,9 @@ class StreamDiffusionAdvancedConfig:
         
         return (advanced_config,)
 
-class StreamDiffusionAccelerationSampler:
-    # Add class-level storage
-    _current_model = None
-    _current_config = None
-    
+class StreamDiffusionSampler:
+    _cached_config = None  # Will store config
+    _cached_params = None  # Will store params
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -270,16 +269,13 @@ class StreamDiffusionAccelerationSampler:
     CATEGORY = "StreamDiffusion"
     DESCRIPTION = "Generates images using the configured StreamDiffusion model and specified prompts and settings."
 
-    def get_model_config(self, stream_model, prompt, negative_prompt, num_inference_steps, 
-                        guidance_scale, delta):
-        """Create a configuration dictionary for comparing model states"""
-        return {
-            'model_id': getattr(stream_model, 'model_id_or_path', None),
-            'mode': getattr(stream_model, 'mode', None),
-            'acceleration': getattr(stream_model, 'acceleration', None),
-            'frame_buffer_size': getattr(stream_model, 'frame_buffer_size', None),
-            'width': getattr(stream_model, 'width', None),
-            'height': getattr(stream_model, 'height', None),
+    def generate(self, stream_model, prompt, negative_prompt, num_inference_steps, 
+                guidance_scale, delta, image=None):
+        
+        #stream_model is a tuple of (model, config)
+        model, config = stream_model
+        
+        current_params = {
             'prompt': prompt,
             'negative_prompt': negative_prompt,
             'num_inference_steps': num_inference_steps,
@@ -287,29 +283,20 @@ class StreamDiffusionAccelerationSampler:
             'delta': delta
         }
 
-    def generate(self, stream_model, prompt, negative_prompt, num_inference_steps, 
-                guidance_scale, delta, image=None):
+        needs_prepare = self._cached_params != current_params
+        needs_warmup = self._cached_config != config
         
-        current_config = self.get_model_config(stream_model, prompt, negative_prompt, 
-                                             num_inference_steps, guidance_scale, delta)
-        new_model = self.__class__._current_model is None or self.__class__._current_config != current_config
-        if (new_model):
-            self.__class__._current_model = stream_model
-            self.__class__._current_config = current_config
-            
-            # Time the preparation step
-            stream_model.prepare(
+        if needs_prepare:
+            self._cached_params = current_params
+            model.prepare(
                 prompt=prompt,
                 negative_prompt=negative_prompt,
                 num_inference_steps=num_inference_steps,
                 guidance_scale=guidance_scale,
                 delta=delta
             )
-
-        else:
-            stream_model = self.__class__._current_model
-
-        if stream_model.mode == "img2img" and image is not None:
+            
+        if model.mode == "img2img" and image is not None:
             # Handle batch of images
             batch_size = image.shape[0]
             outputs = []
@@ -317,22 +304,19 @@ class StreamDiffusionAccelerationSampler:
             for i in range(batch_size):
                 # Convert from BHWC to BCHW format for model input
                 image_tensor = image[i].permute(2, 0, 1).unsqueeze(0)
+                # Warmup model
+                if needs_warmup:
+                    self._cached_config = config
+                    for _ in range(model.batch_size - 1):
+                        model(image=image_tensor)
+                    needs_warmup = False
+                    
 
-                # Warmup timing
-                if new_model:
-                    for _ in range(stream_model.batch_size - 1):
-                        stream_model(image=image_tensor)
-                    new_model = False
-
-                # Generation timing
-                output = stream_model(image=image_tensor)
+                output = model(image=image_tensor)
                 
-                # Handle permutation based on tensor dimensions
-                if len(output.shape) == 4:  # BCHW
-                    output = output.permute(0, 2, 3, 1)
-                elif len(output.shape) == 3:  # CHW
-                    output = output.permute(1, 2, 0)
-                    output = output.unsqueeze(0)  # Add batch dimension -> BHWC
+                # Convert CHW to BHWC
+                output = output.permute(1, 2, 0)
+                output = output.unsqueeze(0)  # Add batch dimension
                 
                 outputs.append(output)
             
@@ -341,14 +325,10 @@ class StreamDiffusionAccelerationSampler:
             
         else:
             # Text to image generation
-            output = stream_model.txt2img()
-            
-            # Handle permutation based on tensor dimensions
-            if len(output.shape) == 4:  # BCHW
-                output_tensor = output.permute(0, 2, 3, 1)
-            elif len(output.shape) == 3:  # CHW
-                output_tensor = output.permute(1, 2, 0)
-                output_tensor = output_tensor.unsqueeze(0)  # Add batch dimension -> BHWC
+            output = model.txt2img()
+            # Convert CHW to BHWC
+            output = output.permute(1, 2, 0)
+            output = output.unsqueeze(0)  # Add batch dimension
             
         return (output_tensor,)
 
@@ -370,7 +350,7 @@ class StreamDiffusionConfigMixin:
         
         return config
 
-class StreamDiffusionEngine(StreamDiffusionConfigMixin):
+class StreamDiffusionConfig(StreamDiffusionConfigMixin):
     @classmethod
     def INPUT_TYPES(s):
         defaults = _get_wrapper_params()
@@ -381,7 +361,7 @@ class StreamDiffusionEngine(StreamDiffusionConfigMixin):
                 "mode": (["img2img", "txt2img"], {"default": defaults["mode"], "tooltip": "Generation mode: image-to-image or text-to-image. Note: txt2img requires cfg_type of 'none'"}),
                 "width": ("INT", {"default": defaults["width"], "min": 64, "max": 2048, "tooltip": "The width of the generated images."}),
                 "height": ("INT", {"default": defaults["height"], "min": 64, "max": 2048, "tooltip": "The height of the generated images."}),
-                "acceleration": (["none", "xformers", "tensorrt"], {"default": defaults["acceleration"], "tooltip": "Acceleration method to optimize performance."}),
+                "acceleration": (["none", "xformers", "tensorrt"], {"default": "none", "tooltip": "Acceleration method to optimize performance."}),
                 "frame_buffer_size": ("INT", {"default": defaults["frame_buffer_size"], "min": 1, "max": 16, "tooltip": "Size of the frame buffer for batch denoising. Increasing this can improve performance at the cost of higher memory usage."}),
                 "use_tiny_vae": ("BOOLEAN", {"default": defaults["use_tiny_vae"], "tooltip": "Use a TinyVAE model for faster decoding with slight quality tradeoff."}),
                 "cfg_type": (["none", "full", "self", "initialize"], {"default": defaults["cfg_type"], "tooltip": """Classifier-Free Guidance type to control how guidance is applied:
@@ -418,7 +398,7 @@ If a suitable engine does not exist, it will be created. This can be used with a
             "mode": mode,
             "width": width,
             "height": height,
-            "acceleration": "None",
+            "acceleration": acceleration,
             "frame_buffer_size": frame_buffer_size,
             "use_tiny_vae": use_tiny_vae,
             "cfg_type": cfg_type,
@@ -437,12 +417,12 @@ If a suitable engine does not exist, it will be created. This can be used with a
             config["engine_dir"],
             parent_name
         )
-        wrapper = StreamDiffusionWrapper(**config)
+        wrapper = (StreamDiffusionWrapper(**config), config)
 
         return (wrapper,)
 
 #TODO: confirm this works well with container deployment
-class StreamDiffusionPrebuiltEngine(StreamDiffusionConfigMixin):
+class StreamDiffusionPrebuiltConfig(StreamDiffusionConfigMixin):
     @classmethod
     def INPUT_TYPES(s):
         defaults = _get_wrapper_params()
@@ -467,6 +447,8 @@ class StreamDiffusionPrebuiltEngine(StreamDiffusionConfigMixin):
     DESCRIPTION = "Configures a model for StreamDiffusion using existing TensorRT engines."
 
     def configure_model(self, engine_config, t_index_list, mode, frame_buffer_size, width, height, model=None, **optional_configs):
+
+
         # Convert t_index_list from string to list of ints
         t_index_list = [int(x.strip()) for x in t_index_list.split(",")]
         
@@ -492,27 +474,27 @@ class StreamDiffusionPrebuiltEngine(StreamDiffusionConfigMixin):
         # Apply optional configs using mixin method
         config = self.apply_optional_configs(config, **optional_configs)
         config["engine_dir"] = engine_dir
-        wrapper = StreamDiffusionWrapper(**config)
+        wrapper = (StreamDiffusionWrapper(**config), config)
         return (wrapper,)
 
 NODE_CLASS_MAPPINGS = {
-    "StreamDiffusionEngine": StreamDiffusionEngine,
-    "StreamDiffusionAccelerationSampler": StreamDiffusionAccelerationSampler,
-    "StreamDiffusionPrebuiltEngine": StreamDiffusionPrebuiltEngine,
+    "StreamDiffusionConfig": StreamDiffusionConfig,
+    "StreamDiffusionSampler": StreamDiffusionSampler,
+    "StreamDiffusionPrebuiltConfig": StreamDiffusionPrebuiltConfig,
     "StreamDiffusionLoraLoader": StreamDiffusionLoraLoader,
     "StreamDiffusionAdvancedConfig": StreamDiffusionAdvancedConfig,
     "StreamDiffusionCheckpointLoader": StreamDiffusionCheckpointLoader,
     "StreamDiffusionTensorRTEngineLoader": StreamDiffusionTensorRTEngineLoader,
-    "StreamDiffusionLPModelLoader": StreamDiffusionLPCheckpointLoader,   
+    "StreamDiffusionLPCheckpointLoader": StreamDiffusionLPCheckpointLoader,   
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "StreamDiffusionEngine": "StreamDiffusionEngine",
-    "StreamDiffusionAccelerationSampler": "StreamDiffusionAccelerationSampler",
+    "StreamDiffusionConfig": "StreamDiffusionConfig",
+    "StreamDiffusionSampler": "StreamDiffusionSampler",
+    "StreamDiffusionPrebuiltConfig": "StreamDiffusionPrebuiltConfig",
     "StreamDiffusionLoraLoader": "StreamDiffusionLoraLoader",
     "StreamDiffusionAdvancedConfig": "StreamDiffusionAdvancedConfig",
     "StreamDiffusionCheckpointLoader": "StreamDiffusionCheckpointLoader",
-    "StreamDiffusionPrebuiltEngine": "StreamDiffusionPrebuiltEngine",
     "StreamDiffusionTensorRTEngineLoader": "StreamDiffusionTensorRTEngineLoader",
     "StreamDiffusionLPCheckpointLoader": "StreamDiffusionLPCheckpointLoader",
 }
