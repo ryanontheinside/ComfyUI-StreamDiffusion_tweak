@@ -85,7 +85,7 @@
         "mode": "img2img",
         "width": 512,
         "height": 512,
-        "acceleration": "tensorrt",
+        "acceleration": "none",
         "frame_buffer_size": 1,
         "use_tiny_vae": true,
         "cfg_type": "self",
