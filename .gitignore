@@ -3,3 +3,5 @@ __pycache__/
 engines/
 dl_checkpoints.sh
 profiling.txt
+.DS_Store
+examples/.DS_Store
