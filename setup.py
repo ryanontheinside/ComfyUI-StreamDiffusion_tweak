@@ -10,7 +10,7 @@ setup(
         "xformers",
         "huggingface-hub>=0.25.0",
         "diffusers>=0.31.0",
-        "protobuf=>4.25.3",
+        "protobuf>=4.25.3",
     ],
     python_requires=">=3.10",
 )
