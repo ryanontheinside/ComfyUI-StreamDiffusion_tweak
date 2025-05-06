@@ -20,10 +20,17 @@ def get_controlnet_models():
     
     # Add some well-known Hugging Face models
     default_models = [
-        "lllyasviel/sd-controlnet-canny", 
-        "lllyasviel/sd-controlnet-depth",
+        "lllyasviel/sd-controlnet-canny",
+        "lllyasviel/sd-controlnet-depth", 
         "lllyasviel/sd-controlnet-openpose",
-        "lllyasviel/sd-controlnet-scribble"
+        "lllyasviel/sd-controlnet-scribble",
+        "lllyasviel/sd-controlnet-hed",
+        "lllyasviel/sd-controlnet-mlsd",
+        "lllyasviel/sd-controlnet-normal",
+        "lllyasviel/sd-controlnet-seg",
+        "lllyasviel/sd-controlnet-lineart",
+        "lllyasviel/sd-controlnet-lineart-anime",
+        "lllyasviel/sd-controlnet-shuffle"
     ]
     models.extend(default_models)
     
