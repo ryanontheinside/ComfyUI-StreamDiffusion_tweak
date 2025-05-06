@@ -179,6 +179,10 @@ class StreamDiffusionControlNetConfigNode:
                 "control_image": ("IMAGE",),
                 "conditioning_scale": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 5.0, "step": 0.01,
                                                "tooltip": "Controls the strength of the ControlNet conditioning"}),
+            },
+            "optional": {
+                "clear_previous_controlnets": ("BOOLEAN", {"default": False, 
+                                                          "tooltip": "When enabled, removes all previous ControlNets before adding this one"}),
             }
         }
     
@@ -186,9 +190,9 @@ class StreamDiffusionControlNetConfigNode:
     OUTPUT_TOOLTIPS = ("The StreamDiffusion model configured with ControlNet.",)
     FUNCTION = "configure_controlnet"
     CATEGORY = "StreamDiffusion"
-    DESCRIPTION = "Configures a StreamDiffusion model to use ControlNet"
+    DESCRIPTION = "Configures a StreamDiffusion model with a ControlNet. Multiple nodes can be chained to add several ControlNets."
     
-    def configure_controlnet(self, stream_model, controlnet, control_image, conditioning_scale=1.0):
+    def configure_controlnet(self, stream_model, controlnet, control_image, conditioning_scale=1.0, clear_previous_controlnets=False):
         """
         Apply ControlNet configuration to a StreamDiffusion model
         
@@ -202,6 +206,8 @@ class StreamDiffusionControlNetConfigNode:
             The conditioning image for ControlNet
         conditioning_scale : float
             Strength of the ControlNet conditioning
+        clear_previous_controlnets : bool
+            When True, removes all previously added ControlNets
             
         Returns
         -------
@@ -212,9 +218,9 @@ class StreamDiffusionControlNetConfigNode:
         wrapper, config = stream_model
         controlnet_model = controlnet[0]
         
-        # Configure the wrapper to use ControlNet
-        wrapper.controlnet = controlnet_model
-        wrapper.controlnet_conditioning_scale = conditioning_scale
+        # Clear previous ControlNets if requested
+        if clear_previous_controlnets:
+            wrapper.clear_controlnets()
         
         # Prepare the ControlNet image
         # Assuming control_image is a torch tensor with shape [B, H, W, C]
@@ -226,8 +232,11 @@ class StreamDiffusionControlNetConfigNode:
             else:
                 control_img = control_image.permute(2, 0, 1).unsqueeze(0)  # [1, C, H, W]
                 
-            # Store the conditioning image
-            wrapper.controlnet_image = control_img.to(device=wrapper.device, dtype=wrapper.dtype)
+            # Convert to the right device and dtype
+            control_img = control_img.to(device=wrapper.device, dtype=wrapper.dtype)
+            
+            # Add the ControlNet model, image, and scale to the wrapper
+            wrapper.add_controlnet(controlnet_model, control_img, conditioning_scale)
         
         # Return the updated model
         return ((wrapper, config),)

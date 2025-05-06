@@ -4,7 +4,7 @@ import gc
 import os
 import traceback
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Union, Tuple
 
 import numpy as np
 import torch
@@ -159,10 +159,14 @@ class StreamDiffusionWrapper:
         self.use_denoising_batch = use_denoising_batch
         self.use_safety_checker = use_safety_checker
         
-        # Store ControlNet model and parameters
-        self.controlnet = controlnet
-        self.controlnet_conditioning_scale = controlnet_conditioning_scale
-        self.controlnet_image = None
+        # Initialize lists to store multiple ControlNets
+        self.controlnets = []
+        self.controlnet_images = []
+        self.controlnet_scales = []
+        
+        # Store legacy single ControlNet (if provided) for backwards compatibility
+        if controlnet is not None:
+            self.add_controlnet(controlnet, None, controlnet_conditioning_scale)
 
         self.stream: StreamDiffusion = self._load_model(
             model_id_or_path=model_id_or_path,
@@ -189,6 +193,29 @@ class StreamDiffusionWrapper:
             self.stream.enable_similar_image_filter(
                 similar_image_filter_threshold, similar_image_filter_max_skip_frame
             )
+    
+    def add_controlnet(self, controlnet, control_image=None, scale=1.0):
+        """
+        Add a ControlNet model to the pipeline
+        
+        Parameters
+        ----------
+        controlnet : ControlNetModel
+            The ControlNet model to add
+        control_image : torch.Tensor, optional
+            The control image tensor, by default None
+        scale : float, optional
+            The conditioning scale, by default 1.0
+        """
+        self.controlnets.append(controlnet)
+        self.controlnet_images.append(control_image)  # Can be None initially
+        self.controlnet_scales.append(scale)
+    
+    def clear_controlnets(self):
+        """Remove all ControlNet models from the pipeline"""
+        self.controlnets = []
+        self.controlnet_images = []
+        self.controlnet_scales = []
 
     def prepare(
         self,
@@ -224,15 +251,15 @@ class StreamDiffusionWrapper:
             delta=delta,
         )
         
-        # Process and store the controlnet image if provided
-        if controlnet_image is not None and self.controlnet is not None:
+        # Process and store the controlnet image if provided (legacy support)
+        if controlnet_image is not None and len(self.controlnets) > 0:
             if isinstance(controlnet_image, str):
                 controlnet_image = Image.open(controlnet_image).convert("RGB").resize((self.width, self.height))
             if isinstance(controlnet_image, Image.Image):
                 controlnet_image = controlnet_image.convert("RGB").resize((self.width, self.height))
                 
-            # Store the conditioning image
-            self.controlnet_image = self.prepare_controlnet_image(controlnet_image)
+            # Store the conditioning image in the first slot (for legacy support)
+            self.controlnet_images[0] = self.prepare_controlnet_image(controlnet_image)
 
     def prepare_controlnet_image(self, image):
         """
@@ -263,9 +290,9 @@ class StreamDiffusionWrapper:
         image = self.stream.pipe.image_processor.preprocess(image).to(device=self.device, dtype=self.dtype)
         return image
 
-    def get_controlnet_output(self, x_t_latent, t_list, prompt_embeds):
+    def get_controlnet_outputs(self, x_t_latent, t_list, prompt_embeds):
         """
-        Process input through ControlNet to get conditioning
+        Process input through all ControlNets to get combined conditioning
         
         Parameters
         ----------
@@ -279,20 +306,43 @@ class StreamDiffusionWrapper:
         Returns
         -------
         Tuple[List[torch.Tensor], torch.Tensor]
-            Tuple of (down_block_res_samples, mid_block_res_sample)
+            Combined outputs from all ControlNets:
+            - down_block_res_samples: List of tensors for each resolution level
+            - mid_block_res_sample: Tensor for mid-block
         """
-        if self.controlnet is None or self.controlnet_image is None:
+        if not self.controlnets or not any(img is not None for img in self.controlnet_images):
             return None, None
             
-        # Forward pass through ControlNet
-        down_block_res_samples, mid_block_res_sample = self.controlnet(
-            x_t_latent,
-            t_list,
-            encoder_hidden_states=prompt_embeds,
-            controlnet_cond=self.controlnet_image,
-            conditioning_scale=self.controlnet_conditioning_scale,
-            return_dict=False,
-        )
+        # Initialize with empty tensors or None
+        down_block_res_samples = None
+        mid_block_res_sample = None
+        
+        # Process each ControlNet
+        for i, (controlnet, control_image, scale) in enumerate(
+            zip(self.controlnets, self.controlnet_images, self.controlnet_scales)
+        ):
+            if controlnet is None or control_image is None or scale == 0:
+                continue
+                
+            # Forward pass through ControlNet
+            down_samples, mid_sample = controlnet(
+                x_t_latent,
+                t_list,
+                encoder_hidden_states=prompt_embeds,
+                controlnet_cond=control_image,
+                conditioning_scale=scale,
+                return_dict=False,
+            )
+            
+            # Combine outputs
+            if down_block_res_samples is None:
+                down_block_res_samples = down_samples
+                mid_block_res_sample = mid_sample
+            else:
+                # Add contributions from this ControlNet
+                for j in range(len(down_block_res_samples)):
+                    down_block_res_samples[j] += down_samples[j]
+                mid_block_res_sample += mid_sample
         
         return down_block_res_samples, mid_block_res_sample
 
@@ -341,23 +391,23 @@ class StreamDiffusionWrapper:
             self.stream.update_prompt(prompt)
 
         # Modify StreamDiffusion's txt2img method to use ControlNet if available
-        if self.controlnet is not None and self.controlnet_image is not None:
+        if self.controlnets and any(img is not None for img in self.controlnet_images):
             # Monkey patch the unet_step method to use ControlNet
             original_unet_step = self.stream.unet_step
             
             def patched_unet_step(x_t_latent, t_list, idx=None):
-                if self.guidance_scale > 1.0 and (self.stream.cfg_type == "initialize"):
+                if self.stream.guidance_scale > 1.0 and (self.stream.cfg_type == "initialize"):
                     x_t_latent_plus_uc = torch.concat([x_t_latent[0:1], x_t_latent], dim=0)
                     t_list_expanded = torch.concat([t_list[0:1], t_list], dim=0)
-                elif self.guidance_scale > 1.0 and (self.stream.cfg_type == "full"):
+                elif self.stream.guidance_scale > 1.0 and (self.stream.cfg_type == "full"):
                     x_t_latent_plus_uc = torch.concat([x_t_latent, x_t_latent], dim=0)
                     t_list_expanded = torch.concat([t_list, t_list], dim=0)
                 else:
                     x_t_latent_plus_uc = x_t_latent
                     t_list_expanded = t_list
                 
-                # Get ControlNet outputs
-                down_block_res_samples, mid_block_res_sample = self.get_controlnet_output(
+                # Get combined ControlNet outputs
+                down_block_res_samples, mid_block_res_sample = self.get_controlnet_outputs(
                     x_t_latent_plus_uc, t_list_expanded, self.stream.prompt_embeds
                 )
                 
@@ -480,7 +530,7 @@ class StreamDiffusionWrapper:
             image = self.preprocess_image(image)
 
         # Monkey patch the unet_step method if ControlNet is available
-        if self.controlnet is not None and self.controlnet_image is not None:
+        if self.controlnets and any(img is not None for img in self.controlnet_images):
             original_unet_step = self.stream.unet_step
             
             def patched_unet_step(x_t_latent, t_list, idx=None):
@@ -494,8 +544,8 @@ class StreamDiffusionWrapper:
                     x_t_latent_plus_uc = x_t_latent
                     t_list_expanded = t_list
                 
-                # Get ControlNet outputs
-                down_block_res_samples, mid_block_res_sample = self.get_controlnet_output(
+                # Get combined ControlNet outputs
+                down_block_res_samples, mid_block_res_sample = self.get_controlnet_outputs(
                     x_t_latent_plus_uc, t_list_expanded, self.stream.prompt_embeds
                 )
                 

@@ -19,6 +19,12 @@ This extension adds ControlNet support to StreamDiffusion in ComfyUI, allowing y
    - `lllyasviel/sd-controlnet-depth`
    - `lllyasviel/sd-controlnet-openpose`
    - `lllyasviel/sd-controlnet-scribble`
+   - `lllyasviel/sd-controlnet-hed`
+   - `lllyasviel/sd-controlnet-mlsd`
+   - `lllyasviel/sd-controlnet-normal`
+   - `lllyasviel/sd-controlnet-seg`
+   - `lllyasviel/control_v11p_sd15_lineart`
+   - `lllyasviel/control_v11p_sd15s2_lineart_anime`
 
 5. For local models, place them in the `models/controlnet` directory. The directory structure should be:
    ```
@@ -56,6 +62,27 @@ This implementation uses Diffusers to load ControlNet models, which requires:
    - Adjust the conditioning scale to control the strength of the ControlNet effect
 4. Run the generation as usual with the StreamDiffusion sampler
 
+### Using Multiple ControlNets
+
+You can chain multiple ControlNets together for combined effects:
+
+1. Create the first ControlNet configuration:
+   - Load ControlNet model → Prepare control image → Configure ControlNet
+
+2. Chain additional ControlNets:
+   - Take the output STREAM_MODEL from the first ControlNet
+   - Connect it to another Configure ControlNet node with a different ControlNet model and control image
+   - Each ControlNet in the chain adds its effect to the generation
+
+3. Control options for each ControlNet:
+   - Adjust individual conditioning scales to balance the influence of each ControlNet
+   - Use the "clear_previous_controlnets" option (set to True) if you want to replace rather than combine
+
+4. Examples of useful combinations:
+   - Depth + Canny: Control both overall structure and edge details
+   - Pose + Face: Control body position and facial features
+   - Scribble + Color: Control both line drawing and colorization
+
 ### Example Workflow
 
 1. **Load ControlNet Model**
@@ -77,10 +104,25 @@ This implementation uses Diffusers to load ControlNet models, which requires:
      - Lower values (0.1-0.5): Subtle conditioning, gives the model more freedom
      - Zero (0.0): Effectively disables the ControlNet without having to rebuild the workflow
 
-4. **Generate Images**
-   - Connect the output of the `Configure ControlNet` node to the `StreamDiffusion Sampler`
+4. **Add Additional ControlNets (Optional)**
+   - Connect the output of the first Configure ControlNet node to another Configure ControlNet node
+   - Use a different ControlNet model and control image
+   - Adjust the conditioning scale for this additional ControlNet
+   - Repeat as needed for more ControlNets
+
+5. **Generate Images**
+   - Connect the output of the final Configure ControlNet node to the `StreamDiffusion Sampler`
    - Set your prompt and other parameters
    - Run the generation
+
+## Performance Considerations
+
+When using multiple ControlNets:
+
+- Each additional ControlNet increases VRAM usage
+- Processing time will increase with each added ControlNet
+- For real-time applications, limit to 1-2 ControlNets with lower resolutions
+- Adjust conditioning scales carefully - using too many strong ControlNets can conflict
 
 ## Troubleshooting
 
@@ -90,11 +132,13 @@ This implementation uses Diffusers to load ControlNet models, which requires:
   - Reducing your image resolution
   - Using a smaller model
   - Using fewer steps (lower t_index_list values)
+  - Reducing the number of ControlNets
   
 - **Speed Issues**: ControlNet will slow down generation. For real-time applications:
   - Use a smaller ControlNet model
   - Reduce the conditioning scale
   - Consider using TensorRT acceleration
+  - Use fewer ControlNets
 
 - **Model Compatibility**: Ensure your ControlNet model is compatible with your base model. For example:
   - SD 1.5 ControlNet models work best with SD 1.5 base models
