@@ -171,6 +171,11 @@ class StreamDiffusionWrapper:
         # Store legacy single ControlNet (if provided) for backwards compatibility
         if controlnet is not None:
             self.add_controlnet(controlnet, None, controlnet_conditioning_scale)
+        
+        # Store ControlNet model and parameters
+        self.controlnet = controlnet
+        self.controlnet_conditioning_scale = controlnet_conditioning_scale
+        self.controlnet_image = None
 
         self.stream: StreamDiffusion = self._load_model(
             model_id_or_path=model_id_or_path,
@@ -229,6 +234,7 @@ class StreamDiffusionWrapper:
         guidance_scale: float = 1.2,
         delta: float = 1.0,
         controlnet_image: Optional[Union[str, Image.Image, torch.Tensor]] = None,
+        controlnet_image: Optional[Union[str, Image.Image, torch.Tensor]] = None,
     ) -> None:
         """
         Prepares the model for inference.
@@ -244,6 +250,8 @@ class StreamDiffusionWrapper:
         delta : float, optional
             The delta multiplier of virtual residual noise,
             by default 1.0.
+        controlnet_image : Optional[Union[str, Image.Image, torch.Tensor]], optional
+            The conditioning image for ControlNet, by default None.
         controlnet_image : Optional[Union[str, Image.Image, torch.Tensor]], optional
             The conditioning image for ControlNet, by default None.
         """
