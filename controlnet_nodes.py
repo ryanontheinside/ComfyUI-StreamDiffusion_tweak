@@ -28,9 +28,8 @@ def get_controlnet_models():
         "lllyasviel/sd-controlnet-mlsd",
         "lllyasviel/sd-controlnet-normal",
         "lllyasviel/sd-controlnet-seg",
-        "lllyasviel/sd-controlnet-lineart",
-        "lllyasviel/sd-controlnet-lineart-anime",
-        "lllyasviel/sd-controlnet-shuffle"
+        "lllyasviel/control_v11p_sd15_lineart",
+        "lllyasviel/control_v11p_sd15s2_lineart_anime"
     ]
     models.extend(default_models)
     
