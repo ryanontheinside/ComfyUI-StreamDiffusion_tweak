@@ -223,20 +223,41 @@ class StreamDiffusionControlNetConfigNode:
             wrapper.clear_controlnets()
         
         # Prepare the ControlNet image
-        # Assuming control_image is a torch tensor with shape [B, H, W, C]
-        # Convert to the format expected by the ControlNet model
+        # Handle batched control images properly
         if control_image is not None:
-            # Process the first image if it's a batch
-            if len(control_image.shape) == 4:
-                control_img = control_image[0].permute(2, 0, 1).unsqueeze(0)  # [1, C, H, W]
-            else:
-                control_img = control_image.permute(2, 0, 1).unsqueeze(0)  # [1, C, H, W]
-                
-            # Convert to the right device and dtype
-            control_img = control_img.to(device=wrapper.device, dtype=wrapper.dtype)
+            # Get batch size
+            batch_size = control_image.shape[0]
             
-            # Add the ControlNet model, image, and scale to the wrapper
-            wrapper.add_controlnet(controlnet_model, control_img, conditioning_scale)
+            if batch_size > 1:
+                # For batched processing, we'll prepare all images but only add the first one initially
+                # The wrapper will handle the batch during inference
+                processed_control_images = []
+                
+                for i in range(batch_size):
+                    # Convert from BHWC to BCHW format for model input
+                    img = control_image[i].permute(2, 0, 1).unsqueeze(0)  # [1, C, H, W]
+                    # Convert to the right device and dtype
+                    img = img.to(device=wrapper.device, dtype=wrapper.dtype)
+                    processed_control_images.append(img)
+                
+                # Store all processed images in the wrapper for batch processing
+                wrapper.add_controlnet(
+                    controlnet_model, 
+                    processed_control_images[0],  # Initially set first image
+                    conditioning_scale
+                )
+                
+                # Store the batch of control images for later use during inference
+                # Get the index of the controlnet we just added
+                controlnet_idx = len(wrapper.controlnets) - 1
+                # Store the batch for later use
+                wrapper.controlnet_batch_images = getattr(wrapper, 'controlnet_batch_images', {})
+                wrapper.controlnet_batch_images[controlnet_idx] = processed_control_images
+            else:
+                # For single image, process normally
+                control_img = control_image[0].permute(2, 0, 1).unsqueeze(0)  # [1, C, H, W]
+                control_img = control_img.to(device=wrapper.device, dtype=wrapper.dtype)
+                wrapper.add_controlnet(controlnet_model, control_img, conditioning_scale)
         
         # Return the updated model
         return ((wrapper, config),)

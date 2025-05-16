@@ -225,6 +225,34 @@ class StreamDiffusionWrapper:
         self.controlnets = []
         self.controlnet_images = []
         self.controlnet_scales = []
+        
+    def update_controlnet_image_for_batch(self, batch_index):
+        """
+        Update ControlNet images for a specific batch index
+        
+        Parameters
+        ----------
+        batch_index : int
+            The index in the batch to use for ControlNet images
+            
+        Returns
+        -------
+        bool
+            True if any ControlNet images were updated, False otherwise
+        """
+        # Check if we have batch images stored
+        if not hasattr(self, 'controlnet_batch_images') or not self.controlnet_batch_images:
+            return False
+            
+        updated = False
+        # For each ControlNet that has batch images stored
+        for controlnet_idx, batch_images in self.controlnet_batch_images.items():
+            if controlnet_idx < len(self.controlnet_images) and batch_index < len(batch_images):
+                # Update the image for this ControlNet to the one for the current batch index
+                self.controlnet_images[controlnet_idx] = batch_images[batch_index]
+                updated = True
+                
+        return updated
 
     def prepare(
         self,
