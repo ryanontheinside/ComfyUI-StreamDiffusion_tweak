@@ -328,7 +328,7 @@ class StreamDiffusionSampler:
             output = model.txt2img()
             # Convert CHW to BHWC
             output = output.permute(1, 2, 0)
-            output = output.unsqueeze(0)  # Add batch dimension
+            output_tensor = output.unsqueeze(0)  # Add batch dimension
             
         return (output_tensor,)
 
