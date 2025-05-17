@@ -29,7 +29,8 @@ def get_controlnet_models():
         "lllyasviel/sd-controlnet-normal",
         "lllyasviel/sd-controlnet-seg",
         "lllyasviel/control_v11p_sd15_lineart",
-        "lllyasviel/control_v11p_sd15s2_lineart_anime"
+        "lllyasviel/control_v11p_sd15s2_lineart_anime",
+        "monster-labs/control_v1p_sd15_qrcode_monster"
     ]
     models.extend(default_models)
     
