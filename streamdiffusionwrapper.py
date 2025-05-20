@@ -262,7 +262,6 @@ class StreamDiffusionWrapper:
         guidance_scale: float = 1.2,
         delta: float = 1.0,
         controlnet_image: Optional[Union[str, Image.Image, torch.Tensor]] = None,
-        controlnet_image: Optional[Union[str, Image.Image, torch.Tensor]] = None,
     ) -> None:
         """
         Prepares the model for inference.
