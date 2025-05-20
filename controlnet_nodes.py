@@ -20,17 +20,22 @@ def get_controlnet_models():
     
     # Add some well-known Hugging Face models
     default_models = [
-        "lllyasviel/sd-controlnet-canny",
-        "lllyasviel/sd-controlnet-depth", 
-        "lllyasviel/sd-controlnet-openpose",
-        "lllyasviel/sd-controlnet-scribble",
-        "lllyasviel/sd-controlnet-hed",
-        "lllyasviel/sd-controlnet-mlsd",
-        "lllyasviel/sd-controlnet-normal",
-        "lllyasviel/sd-controlnet-seg",
-        "lllyasviel/control_v11p_sd15_lineart",
-        "lllyasviel/control_v11p_sd15s2_lineart_anime",
-        "monster-labs/control_v1p_sd15_qrcode_monster"
+        "lllyasviel/control_v11p_sd15_canny",         # Updated canny model
+        "lllyasviel/control_v11f1p_sd15_depth",       # Updated depth model
+        "lllyasviel/control_v11p_sd15_openpose",      # Updated openpose model
+        "lllyasviel/control_v11p_sd15_scribble",      # Updated scribble model
+        "lllyasviel/sd-controlnet-hed",               # Original hed model
+        "lllyasviel/control_v11p_sd15_mlsd",          # Updated mlsd model
+        "lllyasviel/control_v11p_sd15_normalbae",     # Updated normal model
+        "lllyasviel/control_v11p_sd15_seg",           # Updated segmentation model
+        "lllyasviel/control_v11p_sd15_lineart",       # Original lineart model
+        "lllyasviel/control_v11p_sd15s2_lineart_anime", # Keeping anime lineart model
+        "monster-labs/control_v1p_sd15_qrcode_monster", # QR code model v1
+        "monster-labs/control_v1p_sd15_qrcode_monster/v2", # QR code model v2
+        "lllyasviel/control_v11p_sd15_inpaint",       # New inpaint model
+        "lllyasviel/control_v11e_sd15_shuffle",       # New shuffle model
+        "lllyasviel/control_v11e_sd15_ip2p",          # New ip2p model
+        "lllyasviel/control_v11f1e_sd15_tile"         # New tile model
     ]
     models.extend(default_models)
     
