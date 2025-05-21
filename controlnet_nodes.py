@@ -20,22 +20,22 @@ def get_controlnet_models():
     
     # Add some well-known Hugging Face models
     default_models = [
-        "lllyasviel/control_v11p_sd15_canny",         # Updated canny model
-        "lllyasviel/control_v11f1p_sd15_depth",       # Updated depth model
-        "lllyasviel/control_v11p_sd15_openpose",      # Updated openpose model
-        "lllyasviel/control_v11p_sd15_scribble",      # Updated scribble model
-        "lllyasviel/sd-controlnet-hed",               # Original hed model
-        "lllyasviel/control_v11p_sd15_mlsd",          # Updated mlsd model
-        "lllyasviel/control_v11p_sd15_normalbae",     # Updated normal model
-        "lllyasviel/control_v11p_sd15_seg",           # Updated segmentation model
-        "lllyasviel/control_v11p_sd15_lineart",       # Original lineart model
-        "lllyasviel/control_v11p_sd15s2_lineart_anime", # Keeping anime lineart model
-        "monster-labs/control_v1p_sd15_qrcode_monster", # QR code model v1
-        "monster-labs/control_v1p_sd15_qrcode_monster/v2", # QR code model v2
-        "lllyasviel/control_v11p_sd15_inpaint",       # New inpaint model
-        "lllyasviel/control_v11e_sd15_shuffle",       # New shuffle model
-        "lllyasviel/control_v11e_sd15_ip2p",          # New ip2p model
-        "lllyasviel/control_v11f1e_sd15_tile"         # New tile model
+        "lllyasviel/control_v11p_sd15_canny",         
+        "lllyasviel/control_v11f1p_sd15_depth",       
+        "lllyasviel/control_v11p_sd15_openpose",      
+        "lllyasviel/control_v11p_sd15_scribble",      
+        "lllyasviel/sd-controlnet-hed",               
+        "lllyasviel/control_v11p_sd15_mlsd",          
+        "lllyasviel/control_v11p_sd15_normalbae",     
+        "lllyasviel/control_v11p_sd15_seg",           
+        "lllyasviel/control_v11p_sd15_lineart",       
+        "lllyasviel/control_v11p_sd15s2_lineart_anime", 
+        "monster-labs/control_v1p_sd15_qrcode_monster", 
+        "monster-labs/control_v1p_sd15_qrcode_monster/v2",  # QR code model v2 (in v2 subfolder)
+        "lllyasviel/control_v11p_sd15_inpaint",       
+        "lllyasviel/control_v11e_sd15_shuffle",       
+        "lllyasviel/control_v11e_sd15_ip2p",          
+        "lllyasviel/control_v11f1e_sd15_tile"         
     ]
     models.extend(default_models)
     
@@ -95,10 +95,24 @@ class StreamDiffusionControlNetLoader:
             # Handle Hugging Face model IDs (they contain a slash)
             if "/" in path_to_use:
                 print(f"Loading ControlNet from Hugging Face: {path_to_use}")
-                controlnet = ControlNetModel.from_pretrained(
-                    path_to_use, 
-                    torch_dtype=torch.float16
-                ).to("cuda")
+                # Check if this is a model with a subfolder path like "monster-labs/control_v1p_sd15_qrcode_monster/v2"
+                if path_to_use.count("/") > 1:
+                    # Split into repo_id and subfolder
+                    parts = path_to_use.split("/")
+                    repo_id = "/".join(parts[:2])  # e.g., "monster-labs/control_v1p_sd15_qrcode_monster"
+                    subfolder = "/".join(parts[2:])  # e.g., "v2"
+                    print(f"Loading from Hugging Face with subfolder: repo_id={repo_id}, subfolder={subfolder}")
+                    controlnet = ControlNetModel.from_pretrained(
+                        repo_id,
+                        subfolder=subfolder,
+                        torch_dtype=torch.float16
+                    ).to("cuda")
+                else:
+                    # Normal Hugging Face model ID
+                    controlnet = ControlNetModel.from_pretrained(
+                        path_to_use, 
+                        torch_dtype=torch.float16
+                    ).to("cuda")
                 return ((controlnet,),)
             
             # Handle local model directory with config.json
