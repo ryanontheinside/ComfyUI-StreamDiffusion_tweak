@@ -202,7 +202,7 @@ class StreamDiffusionControlNetConfigNode:
             },
             "optional": {
                 "clear_previous_controlnets": ("BOOLEAN", {"default": False, 
-                                                          "tooltip": "When enabled, removes all previous ControlNets before adding this one"}),
+                                                          "tooltip": "IMPORTANT: Enable this for the first controlnet in the chain. When enabled, removes all previous ControlNets before adding this one"}),
             }
         }
     
